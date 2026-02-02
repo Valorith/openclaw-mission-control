@@ -137,11 +137,24 @@ def dispatch_task(
             detail="OpenClaw gateway is not configured (set OPENCLAW_GATEWAY_URL/TOKEN)",
         )
 
-    # Best-effort: enqueue an agent dispatch. This does not mutate the task.
-    background.add_task(
-        notify_openclaw,
-        NotifyContext(event="task.assigned", actor_employee_id=actor_employee_id, task_id=task.id),
-    )
+    # Best-effort: enqueue a dispatch notification.
+    # IMPORTANT: if a task is already in review, the reviewer (not the assignee) should be notified.
+    status = (getattr(task, "status", None) or "").lower()
+    if status in {"review", "ready_for_review"}:
+        background.add_task(
+            notify_openclaw,
+            NotifyContext(
+                event="status.changed",
+                actor_employee_id=actor_employee_id,
+                task_id=task.id,
+                changed_fields={"status": {"to": task.status}},
+            ),
+        )
+    else:
+        background.add_task(
+            notify_openclaw,
+            NotifyContext(event="task.assigned", actor_employee_id=actor_employee_id, task_id=task.id),
+        )
 
     return {"ok": True}
 
