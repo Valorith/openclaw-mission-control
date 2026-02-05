@@ -24,9 +24,7 @@ class BoardCreate(BoardBase):
     def validate_goal_fields(self):
         if self.board_type == "goal" and self.goal_confirmed:
             if not self.objective or not self.success_metrics:
-                raise ValueError(
-                    "Confirmed goal boards require objective and success_metrics"
-                )
+                raise ValueError("Confirmed goal boards require objective and success_metrics")
         return self
 
 

@@ -10,11 +10,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from app.core.config import settings
 from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
-from app.integrations.openclaw_gateway import (
-    OpenClawGatewayError,
-    ensure_session,
-    openclaw_call,
-)
+from app.integrations.openclaw_gateway import OpenClawGatewayError, ensure_session, openclaw_call
 from app.models.agents import Agent
 from app.models.boards import Board
 from app.models.gateways import Gateway
@@ -304,9 +300,7 @@ def _render_agent_files(
             )
             heartbeat_path = _templates_root() / heartbeat_template
             if heartbeat_path.exists():
-                rendered[name] = (
-                    env.get_template(heartbeat_template).render(**context).strip()
-                )
+                rendered[name] = env.get_template(heartbeat_template).render(**context).strip()
                 continue
         override = overrides.get(name)
         if override:
@@ -400,7 +394,9 @@ async def _remove_gateway_agent_list(
     if not isinstance(lst, list):
         raise OpenClawGatewayError("config agents.list is not a list")
 
-    new_list = [entry for entry in lst if not (isinstance(entry, dict) and entry.get("id") == agent_id)]
+    new_list = [
+        entry for entry in lst if not (isinstance(entry, dict) and entry.get("id") == agent_id)
+    ]
     if len(new_list) == len(lst):
         return
     patch = {"agents": {"list": new_list}}

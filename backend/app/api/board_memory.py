@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import asyncio
 import json
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, col, select
@@ -13,12 +13,8 @@ from starlette.concurrency import run_in_threadpool
 from app.api.deps import ActorContext, get_board_or_404, require_admin_or_agent
 from app.core.config import settings
 from app.db.session import engine, get_session
-from app.integrations.openclaw_gateway import (
-    GatewayConfig as GatewayClientConfig,
-    OpenClawGatewayError,
-    ensure_session,
-    send_message,
-)
+from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
+from app.integrations.openclaw_gateway import OpenClawGatewayError, ensure_session, send_message
 from app.models.agents import Agent
 from app.models.board_memory import BoardMemory
 from app.models.gateways import Gateway
@@ -46,9 +42,7 @@ def _parse_since(value: str | None) -> datetime | None:
 
 
 def _serialize_memory(memory: BoardMemory) -> dict[str, object]:
-    return BoardMemoryRead.model_validate(
-        memory, from_attributes=True
-    ).model_dump(mode="json")
+    return BoardMemoryRead.model_validate(memory, from_attributes=True).model_dump(mode="json")
 
 
 def _extract_mentions(message: str) -> set[str]:
@@ -162,6 +156,7 @@ def _notify_chat_targets(
         except OpenClawGatewayError:
             continue
 
+
 @router.get("", response_model=list[BoardMemoryRead])
 def list_board_memory(
     limit: int = Query(default=50, ge=1, le=200),
@@ -201,9 +196,7 @@ async def stream_board_memory(
         while True:
             if await request.is_disconnected():
                 break
-            memories = await run_in_threadpool(
-                _fetch_memory_events, board.id, last_seen
-            )
+            memories = await run_in_threadpool(_fetch_memory_events, board.id, last_seen)
             for memory in memories:
                 if memory.created_at > last_seen:
                     last_seen = memory.created_at

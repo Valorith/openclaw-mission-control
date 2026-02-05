@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import re
-from datetime import datetime, timedelta, timezone
 import asyncio
 import json
+import re
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -23,7 +23,13 @@ from app.models.agents import Agent
 from app.models.boards import Board
 from app.models.gateways import Gateway
 from app.models.tasks import Task
-from app.schemas.agents import AgentCreate, AgentHeartbeat, AgentHeartbeatCreate, AgentRead, AgentUpdate
+from app.schemas.agents import (
+    AgentCreate,
+    AgentHeartbeat,
+    AgentHeartbeatCreate,
+    AgentRead,
+    AgentUpdate,
+)
 from app.services.activity_log import record_activity
 from app.services.agent_provisioning import (
     DEFAULT_HEARTBEAT_CONFIG,
@@ -159,14 +165,10 @@ def _to_agent_read(agent: Agent, main_session_keys: set[str]) -> AgentRead:
     return model.model_copy(update={"is_gateway_main": _is_gateway_main(agent, main_session_keys)})
 
 
-def _find_gateway_for_main_session(
-    session: Session, session_key: str | None
-) -> Gateway | None:
+def _find_gateway_for_main_session(session: Session, session_key: str | None) -> Gateway | None:
     if not session_key:
         return None
-    return session.exec(
-        select(Gateway).where(Gateway.main_session_key == session_key)
-    ).first()
+    return session.exec(select(Gateway).where(Gateway.main_session_key == session_key)).first()
 
 
 async def _ensure_gateway_session(
@@ -193,9 +195,7 @@ def _with_computed_status(agent: Agent) -> Agent:
 
 
 def _serialize_agent(agent: Agent, main_session_keys: set[str]) -> dict[str, object]:
-    return _to_agent_read(
-        _with_computed_status(agent), main_session_keys
-    ).model_dump(mode="json")
+    return _to_agent_read(_with_computed_status(agent), main_session_keys).model_dump(mode="json")
 
 
 def _fetch_agent_events(
@@ -206,15 +206,12 @@ def _fetch_agent_events(
         statement = select(Agent)
         if board_id:
             statement = statement.where(col(Agent.board_id) == board_id)
-        statement = (
-            statement.where(
-                or_(
-                    col(Agent.updated_at) >= since,
-                    col(Agent.last_seen_at) >= since,
-                )
+        statement = statement.where(
+            or_(
+                col(Agent.updated_at) >= since,
+                col(Agent.last_seen_at) >= since,
             )
-            .order_by(asc(col(Agent.updated_at)))
-        )
+        ).order_by(asc(col(Agent.updated_at)))
         return list(session.exec(statement))
 
 
@@ -257,10 +254,7 @@ def list_agents(
 ) -> list[Agent]:
     agents = list(session.exec(select(Agent)))
     main_session_keys = _get_gateway_main_session_keys(session)
-    return [
-        _to_agent_read(_with_computed_status(agent), main_session_keys)
-        for agent in agents
-    ]
+    return [_to_agent_read(_with_computed_status(agent), main_session_keys) for agent in agents]
 
 
 @router.get("/stream")
@@ -336,9 +330,7 @@ async def create_agent(
         data["identity_template"] = None
     if data.get("soul_template") == "":
         data["soul_template"] = None
-    data["identity_profile"] = _normalize_identity_profile(
-        data.get("identity_profile")
-    )
+    data["identity_profile"] = _normalize_identity_profile(data.get("identity_profile"))
     agent = Agent.model_validate(data)
     agent.status = "provisioning"
     raw_token = generate_agent_token()
@@ -441,9 +433,7 @@ async def update_agent(
     if updates.get("soul_template") == "":
         updates["soul_template"] = None
     if "identity_profile" in updates:
-        updates["identity_profile"] = _normalize_identity_profile(
-            updates.get("identity_profile")
-        )
+        updates["identity_profile"] = _normalize_identity_profile(updates.get("identity_profile"))
     if not updates and not force and make_main is None:
         main_session_keys = _get_gateway_main_session_keys(session)
         return _to_agent_read(_with_computed_status(agent), main_session_keys)
@@ -823,9 +813,7 @@ def delete_agent(
         )
     )
     session.execute(
-        update(ActivityEvent)
-        .where(col(ActivityEvent.agent_id) == agent.id)
-        .values(agent_id=None)
+        update(ActivityEvent).where(col(ActivityEvent.agent_id) == agent.id).values(agent_id=None)
     )
     session.delete(agent)
     session.commit()

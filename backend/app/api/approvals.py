@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import asyncio
 import json
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -42,9 +42,7 @@ def _approval_updated_at(approval: Approval) -> datetime:
 
 
 def _serialize_approval(approval: Approval) -> dict[str, object]:
-    return ApprovalRead.model_validate(
-        approval, from_attributes=True
-    ).model_dump(mode="json")
+    return ApprovalRead.model_validate(approval, from_attributes=True).model_dump(mode="json")
 
 
 def _fetch_approval_events(
@@ -103,9 +101,7 @@ async def stream_approvals(
         while True:
             if await request.is_disconnected():
                 break
-            approvals = await run_in_threadpool(
-                _fetch_approval_events, board.id, last_seen
-            )
+            approvals = await run_in_threadpool(_fetch_approval_events, board.id, last_seen)
             for approval in approvals:
                 updated_at = _approval_updated_at(approval)
                 if updated_at > last_seen:

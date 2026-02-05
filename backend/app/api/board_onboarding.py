@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-import logging
 from sqlmodel import Session, select
 
 from app.api.deps import ActorContext, get_board_or_404, require_admin_auth, require_admin_or_agent
@@ -31,7 +31,6 @@ from app.services.agent_provisioning import DEFAULT_HEARTBEAT_CONFIG, provision_
 
 router = APIRouter(prefix="/boards/{board_id}/onboarding", tags=["board-onboarding"])
 logger = logging.getLogger(__name__)
-
 
 
 def _gateway_config(session: Session, board: Board) -> tuple[Gateway, GatewayClientConfig]:
@@ -64,9 +63,7 @@ async def _ensure_lead_agent(
     auth: AuthContext,
 ) -> Agent:
     existing = session.exec(
-        select(Agent)
-        .where(Agent.board_id == board.id)
-        .where(Agent.is_board_lead.is_(True))
+        select(Agent).where(Agent.board_id == board.id).where(Agent.is_board_lead.is_(True))
     ).first()
     if existing:
         if existing.name != _lead_agent_name(board):
@@ -161,21 +158,21 @@ async def start_onboarding(
         "Onboarding response endpoint:\n"
         f"POST {base_url}/api/v1/agent/boards/{board.id}/onboarding\n"
         "QUESTION example (send JSON body exactly as shown):\n"
-        f"curl -s -X POST \"{base_url}/api/v1/agent/boards/{board.id}/onboarding\" "
-        "-H \"X-Agent-Token: $AUTH_TOKEN\" "
-        "-H \"Content-Type: application/json\" "
-        "-d '{\"question\":\"...\",\"options\":[{\"id\":\"1\",\"label\":\"...\"},{\"id\":\"2\",\"label\":\"...\"}]}'\n"
+        f'curl -s -X POST "{base_url}/api/v1/agent/boards/{board.id}/onboarding" '
+        '-H "X-Agent-Token: $AUTH_TOKEN" '
+        '-H "Content-Type: application/json" '
+        '-d \'{"question":"...","options":[{"id":"1","label":"..."},{"id":"2","label":"..."}]}\'\n'
         "COMPLETION example (send JSON body exactly as shown):\n"
-        f"curl -s -X POST \"{base_url}/api/v1/agent/boards/{board.id}/onboarding\" "
-        "-H \"X-Agent-Token: $AUTH_TOKEN\" "
-        "-H \"Content-Type: application/json\" "
-        "-d '{\"status\":\"complete\",\"board_type\":\"goal\",\"objective\":\"...\",\"success_metrics\":{...},\"target_date\":\"YYYY-MM-DD\"}'\n"
+        f'curl -s -X POST "{base_url}/api/v1/agent/boards/{board.id}/onboarding" '
+        '-H "X-Agent-Token: $AUTH_TOKEN" '
+        '-H "Content-Type: application/json" '
+        '-d \'{"status":"complete","board_type":"goal","objective":"...","success_metrics":{...},"target_date":"YYYY-MM-DD"}\'\n'
         "QUESTION FORMAT (one question per response, no arrays, no markdown, no extra text):\n"
-        "{\"question\":\"...\",\"options\":[{\"id\":\"1\",\"label\":\"...\"},{\"id\":\"2\",\"label\":\"...\"}]}\n"
+        '{"question":"...","options":[{"id":"1","label":"..."},{"id":"2","label":"..."}]}\n'
         "Do NOT wrap questions in a list. Do NOT add commentary.\n"
         "When you have enough info, return JSON ONLY (via API):\n"
-        "{\"status\":\"complete\",\"board_type\":\"goal\"|\"general\",\"objective\":\"...\","
-        "\"success_metrics\":{...},\"target_date\":\"YYYY-MM-DD\"}."
+        '{"status":"complete","board_type":"goal"|"general","objective":"...",'
+        '"success_metrics":{...},"target_date":"YYYY-MM-DD"}.'
     )
 
     try:

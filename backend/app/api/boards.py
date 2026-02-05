@@ -214,9 +214,7 @@ def delete_board(
     session.execute(delete(Approval).where(col(Approval.board_id) == board.id))
     session.execute(delete(BoardMemory).where(col(BoardMemory.board_id) == board.id))
     session.execute(
-        delete(BoardOnboardingSession).where(
-            col(BoardOnboardingSession.board_id) == board.id
-        )
+        delete(BoardOnboardingSession).where(col(BoardOnboardingSession.board_id) == board.id)
     )
     session.execute(delete(Task).where(col(Task.board_id) == board.id))
     session.delete(board)

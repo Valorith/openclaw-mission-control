@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from uuid import UUID
 import asyncio
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
@@ -14,28 +14,18 @@ from app.api import tasks as tasks_api
 from app.api.deps import ActorContext, get_board_or_404, get_task_or_404
 from app.core.agent_auth import AgentAuthContext, get_agent_auth_context
 from app.db.session import get_session
-from app.integrations.openclaw_gateway import (
-    GatewayConfig as GatewayClientConfig,
-    OpenClawGatewayError,
-    ensure_session,
-    send_message,
-)
+from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
+from app.integrations.openclaw_gateway import OpenClawGatewayError, ensure_session, send_message
 from app.models.agents import Agent
-from app.models.tasks import Task
 from app.models.boards import Board
 from app.models.gateways import Gateway
+from app.models.tasks import Task
+from app.schemas.agents import AgentCreate, AgentHeartbeatCreate, AgentNudge, AgentRead
 from app.schemas.approvals import ApprovalCreate, ApprovalRead
 from app.schemas.board_memory import BoardMemoryCreate, BoardMemoryRead
 from app.schemas.board_onboarding import BoardOnboardingRead
 from app.schemas.boards import BoardRead
-from app.schemas.tasks import (
-    TaskCommentCreate,
-    TaskCommentRead,
-    TaskCreate,
-    TaskRead,
-    TaskUpdate,
-)
-from app.schemas.agents import AgentCreate, AgentHeartbeatCreate, AgentNudge, AgentRead
+from app.schemas.tasks import TaskCommentCreate, TaskCommentRead, TaskCreate, TaskRead, TaskUpdate
 from app.services.activity_log import record_activity
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -98,9 +88,7 @@ def list_agents(
     agents = list(session.exec(statement))
     main_session_keys = agents_api._get_gateway_main_session_keys(session)
     return [
-        agents_api._to_agent_read(
-            agents_api._with_computed_status(agent), main_session_keys
-        )
+        agents_api._to_agent_read(agents_api._with_computed_status(agent), main_session_keys)
         for agent in agents
     ]
 
@@ -351,6 +339,7 @@ def nudge_agent(
             detail="message is required",
         )
     config = _gateway_config(session, board)
+
     async def _send() -> None:
         await ensure_session(target.openclaw_session_id, config=config, label=target.name)
         await send_message(

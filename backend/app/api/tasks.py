@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import asyncio
 import json
 import re
 from collections import deque
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import asc, delete, desc
+from sqlmodel import Session, col, select
 from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import run_in_threadpool
-from sqlalchemy import asc, desc, delete
-from sqlmodel import Session, col, select
 
 from app.api.deps import (
     ActorContext,
@@ -22,18 +22,14 @@ from app.api.deps import (
 )
 from app.core.auth import AuthContext
 from app.db.session import engine, get_session
-from app.integrations.openclaw_gateway import (
-    GatewayConfig as GatewayClientConfig,
-    OpenClawGatewayError,
-    ensure_session,
-    send_message,
-)
+from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
+from app.integrations.openclaw_gateway import OpenClawGatewayError, ensure_session, send_message
 from app.models.activity_events import ActivityEvent
 from app.models.agents import Agent
 from app.models.boards import Board
 from app.models.gateways import Gateway
-from app.models.tasks import Task
 from app.models.task_fingerprints import TaskFingerprint
+from app.models.tasks import Task
 from app.schemas.tasks import TaskCommentCreate, TaskCommentRead, TaskCreate, TaskRead, TaskUpdate
 from app.services.activity_log import record_activity
 
@@ -151,9 +147,7 @@ def _fetch_task_events(
     since: datetime,
 ) -> list[tuple[ActivityEvent, Task | None]]:
     with Session(engine) as session:
-        task_ids = list(
-            session.exec(select(Task.id).where(col(Task.board_id) == board_id))
-        )
+        task_ids = list(session.exec(select(Task.id).where(col(Task.board_id) == board_id)))
         if not task_ids:
             return []
         statement = (
@@ -270,9 +264,7 @@ def _notify_lead_on_task_create(
     task: Task,
 ) -> None:
     lead = session.exec(
-        select(Agent)
-        .where(Agent.board_id == board.id)
-        .where(Agent.is_board_lead.is_(True))
+        select(Agent).where(Agent.board_id == board.id).where(Agent.is_board_lead.is_(True))
     ).first()
     if lead is None or not lead.openclaw_session_id:
         return
@@ -329,9 +321,7 @@ def _notify_lead_on_task_unassigned(
     task: Task,
 ) -> None:
     lead = session.exec(
-        select(Agent)
-        .where(Agent.board_id == board.id)
-        .where(Agent.is_board_lead.is_(True))
+        select(Agent).where(Agent.board_id == board.id).where(Agent.is_board_lead.is_(True))
     ).first()
     if lead is None or not lead.openclaw_session_id:
         return
@@ -639,11 +629,7 @@ def update_task(
                     task=task,
                 )
     if task.assigned_agent_id and task.assigned_agent_id != previous_assigned:
-        if (
-            actor.actor_type == "agent"
-            and actor.agent
-            and task.assigned_agent_id == actor.agent.id
-        ):
+        if actor.actor_type == "agent" and actor.agent and task.assigned_agent_id == actor.agent.id:
             return task
         assigned_agent = session.get(Agent, task.assigned_agent_id)
         if assigned_agent:
@@ -740,11 +726,7 @@ def create_task_comment(
             snippet = payload.message.strip()
             if len(snippet) > 500:
                 snippet = f"{snippet[:497]}..."
-            actor_name = (
-                actor.agent.name
-                if actor.actor_type == "agent" and actor.agent
-                else "User"
-            )
+            actor_name = actor.agent.name if actor.actor_type == "agent" and actor.agent else "User"
             for agent in targets.values():
                 if not agent.openclaw_session_id:
                     continue

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
-
-from datetime import datetime
 
 from app.core.agent_tokens import generate_agent_token, hash_agent_token
 from app.core.auth import AuthContext, get_auth_context
@@ -306,7 +305,9 @@ async def _ensure_main_agent(
     try:
         await provision_main_agent(agent, gateway, raw_token, auth.user, action=action)
         await ensure_session(
-            gateway.main_session_key, config=GatewayClientConfig(url=gateway.url, token=gateway.token), label=agent.name
+            gateway.main_session_key,
+            config=GatewayClientConfig(url=gateway.url, token=gateway.token),
+            label=agent.name,
         )
         await send_message(
             (
