@@ -49,17 +49,43 @@ type Question = {
   options: QuestionOption[];
 };
 
+const normalizeQuestion = (value: unknown): Question | null => {
+  if (!value || typeof value !== "object") return null;
+  const data = value as { question?: unknown; options?: unknown };
+  if (typeof data.question !== "string" || !Array.isArray(data.options)) return null;
+  const options: QuestionOption[] = data.options
+    .map((option, index) => {
+      if (typeof option === "string") {
+        return { id: String(index + 1), label: option };
+      }
+      if (option && typeof option === "object") {
+        const raw = option as { id?: unknown; label?: unknown };
+        const label =
+          typeof raw.label === "string" ? raw.label : typeof raw.id === "string" ? raw.id : null;
+        if (!label) return null;
+        return {
+          id: typeof raw.id === "string" ? raw.id : String(index + 1),
+          label,
+        };
+      }
+      return null;
+    })
+    .filter((option): option is QuestionOption => Boolean(option));
+  if (!options.length) return null;
+  return { question: data.question, options };
+};
+
 const parseQuestion = (messages?: Array<{ role: string; content: string }> | null) => {
   if (!messages?.length) return null;
   const lastAssistant = [...messages].reverse().find((msg) => msg.role === "assistant");
   if (!lastAssistant?.content) return null;
   try {
-    return JSON.parse(lastAssistant.content) as Question;
+    return normalizeQuestion(JSON.parse(lastAssistant.content));
   } catch {
     const match = lastAssistant.content.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (match) {
       try {
-        return JSON.parse(match[1]) as Question;
+        return normalizeQuestion(JSON.parse(match[1]));
       } catch {
         return null;
       }
@@ -80,9 +106,15 @@ export function BoardOnboardingChat({
   const [loading, setLoading] = useState(false);
   const [otherText, setOtherText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
 
   const question = useMemo(() => parseQuestion(session?.messages), [session]);
   const draft = session?.draft_goal ?? null;
+
+  useEffect(() => {
+    setSelectedOptions([]);
+    setOtherText("");
+  }, [question?.question]);
 
   const authFetch = useCallback(
     async (url: string, options: RequestInit = {}) => {
@@ -162,6 +194,20 @@ export function BoardOnboardingChat({
     [authFetch, boardId]
   );
 
+  const toggleOption = useCallback((label: string) => {
+    setSelectedOptions((prev) =>
+      prev.includes(label) ? prev.filter((item) => item !== label) : [...prev, label]
+    );
+  }, []);
+
+  const submitAnswer = useCallback(() => {
+    const trimmedOther = otherText.trim();
+    const answer =
+      selectedOptions.length > 0 ? selectedOptions.join(", ") : "Other";
+    if (!answer && !trimmedOther) return;
+    void handleAnswer(answer, trimmedOther || undefined);
+  }, [handleAnswer, otherText, selectedOptions]);
+
   const confirmGoal = async () => {
     if (!draft) return;
     setLoading(true);
@@ -228,17 +274,20 @@ export function BoardOnboardingChat({
         <div className="space-y-3">
           <p className="text-sm font-medium text-slate-900">{question.question}</p>
           <div className="space-y-2">
-            {question.options.map((option) => (
-              <Button
-                key={option.id}
-                variant="secondary"
-                className="w-full justify-start"
-                onClick={() => handleAnswer(option.label)}
-                disabled={loading}
-              >
-                {option.label}
-              </Button>
-            ))}
+            {question.options.map((option) => {
+              const isSelected = selectedOptions.includes(option.label);
+              return (
+                <Button
+                  key={option.id}
+                  variant={isSelected ? "primary" : "secondary"}
+                  className="w-full justify-start"
+                  onClick={() => toggleOption(option.label)}
+                  disabled={loading}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
           </div>
           <div className="space-y-2">
             <Input
@@ -248,14 +297,17 @@ export function BoardOnboardingChat({
             />
             <Button
               variant="outline"
-              onClick={() => {
-                const trimmed = otherText.trim();
-                void handleAnswer(trimmed || "Other", trimmed || undefined);
-              }}
-              disabled={loading || !otherText.trim()}
+              onClick={submitAnswer}
+              disabled={
+                loading ||
+                (selectedOptions.length === 0 && !otherText.trim())
+              }
             >
-              Submit other
+              {loading ? "Sending..." : "Next"}
             </Button>
+            {loading ? (
+              <p className="text-xs text-slate-500">Sending your answer…</p>
+            ) : null}
           </div>
         </div>
       ) : (

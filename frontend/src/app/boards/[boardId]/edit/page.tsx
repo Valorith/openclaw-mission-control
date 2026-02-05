@@ -5,9 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 
 import { SignInButton, SignedIn, SignedOut, useAuth } from "@clerk/nextjs";
 
+import { BoardApprovalsPanel } from "@/components/BoardApprovalsPanel";
+import { BoardGoalPanel } from "@/components/BoardGoalPanel";
+import { BoardOnboardingChat } from "@/components/BoardOnboardingChat";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
 import { DashboardShell } from "@/components/templates/DashboardShell";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -74,6 +78,7 @@ export default function EditBoardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   const isFormReady = Boolean(name.trim() && gatewayId);
 
@@ -121,6 +126,17 @@ export default function EditBoardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     }
+  };
+
+  const handleOnboardingConfirmed = (updated: Board) => {
+    setBoard(updated);
+    setBoardType(updated.board_type ?? "goal");
+    setObjective(updated.objective ?? "");
+    setSuccessMetrics(
+      updated.success_metrics ? JSON.stringify(updated.success_metrics, null, 2) : ""
+    );
+    setTargetDate(toDateInput(updated.target_date));
+    setIsOnboardingOpen(false);
   };
 
   useEffect(() => {
@@ -199,7 +215,8 @@ export default function EditBoardPage() {
   };
 
   return (
-    <DashboardShell>
+    <>
+      <DashboardShell>
       <SignedOut>
         <div className="col-span-2 flex min-h-[calc(100vh-64px)] items-center justify-center bg-slate-50 p-10 text-center">
           <div className="rounded-xl border border-slate-200 bg-white px-8 py-6 shadow-sm">
@@ -229,126 +246,152 @@ export default function EditBoardPage() {
           </div>
 
           <div className="p-8">
-            <form
-              onSubmit={handleSubmit}
-              className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-            >
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-900">
-                    Board name <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Board name"
-                    disabled={isLoading || !board}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-900">
-                    Gateway <span className="text-red-500">*</span>
-                  </label>
-                  <SearchableSelect
-                    ariaLabel="Select gateway"
-                    value={gatewayId}
-                    onValueChange={setGatewayId}
-                    options={gatewayOptions}
-                    placeholder="Select gateway"
-                    searchPlaceholder="Search gateways..."
-                    emptyMessage="No gateways found."
-                    triggerClassName="w-full h-11 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                    contentClassName="rounded-xl border border-slate-200 shadow-lg"
-                    itemClassName="px-4 py-3 text-sm text-slate-700 data-[selected=true]:bg-slate-50 data-[selected=true]:text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-900">
-                    Board type
-                  </label>
-                  <Select value={boardType} onValueChange={setBoardType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select board type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="goal">Goal</SelectItem>
-                      <SelectItem value="general">General</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-900">
-                    Target date
-                  </label>
-                  <Input
-                    type="date"
-                    value={targetDate}
-                    onChange={(event) => setTargetDate(event.target.value)}
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-900">
-                  Objective
-                </label>
-                <Textarea
-                  value={objective}
-                  onChange={(event) => setObjective(event.target.value)}
-                  placeholder="What should this board achieve?"
-                  className="min-h-[120px]"
-                  disabled={isLoading}
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="space-y-6">
+                <BoardGoalPanel
+                  board={board}
+                  onStartOnboarding={() => setIsOnboardingOpen(true)}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-900">
-                  Success metrics (JSON)
-                </label>
-                <Textarea
-                  value={successMetrics}
-                  onChange={(event) => setSuccessMetrics(event.target.value)}
-                  placeholder='e.g. { "target": "Launch by week 2" }'
-                  className="min-h-[140px] font-mono text-xs"
-                  disabled={isLoading}
-                />
-                <p className="text-xs text-slate-500">
-                  Add key outcomes so the lead agent can measure progress.
-                </p>
-                {metricsError ? (
-                  <p className="text-xs text-red-500">{metricsError}</p>
-                ) : null}
-              </div>
-
-              {gateways.length === 0 ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  <p>No gateways available. Create one in Gateways to continue.</p>
-                </div>
-              ) : null}
-
-              {error ? <p className="text-sm text-red-500">{error}</p> : null}
-
-              <div className="flex justify-end gap-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => router.push(`/boards/${boardId}`)}
-                  disabled={isLoading}
+                <form
+                  onSubmit={handleSubmit}
+                  className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
                 >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isLoading || !board || !isFormReady}>
-                  {isLoading ? "Saving…" : "Save changes"}
-                </Button>
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-900">
+                        Board name <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="Board name"
+                        disabled={isLoading || !board}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-900">
+                        Gateway <span className="text-red-500">*</span>
+                      </label>
+                      <SearchableSelect
+                        ariaLabel="Select gateway"
+                        value={gatewayId}
+                        onValueChange={setGatewayId}
+                        options={gatewayOptions}
+                        placeholder="Select gateway"
+                        searchPlaceholder="Search gateways..."
+                        emptyMessage="No gateways found."
+                        triggerClassName="w-full h-11 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                        contentClassName="rounded-xl border border-slate-200 shadow-lg"
+                        itemClassName="px-4 py-3 text-sm text-slate-700 data-[selected=true]:bg-slate-50 data-[selected=true]:text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-900">
+                        Board type
+                      </label>
+                      <Select value={boardType} onValueChange={setBoardType}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select board type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="goal">Goal</SelectItem>
+                          <SelectItem value="general">General</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-900">
+                        Target date
+                      </label>
+                      <Input
+                        type="date"
+                        value={targetDate}
+                        onChange={(event) => setTargetDate(event.target.value)}
+                        disabled={isLoading}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-900">
+                      Objective
+                    </label>
+                    <Textarea
+                      value={objective}
+                      onChange={(event) => setObjective(event.target.value)}
+                      placeholder="What should this board achieve?"
+                      className="min-h-[120px]"
+                      disabled={isLoading}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-900">
+                      Success metrics (JSON)
+                    </label>
+                    <Textarea
+                      value={successMetrics}
+                      onChange={(event) => setSuccessMetrics(event.target.value)}
+                      placeholder='e.g. { "target": "Launch by week 2" }'
+                      className="min-h-[140px] font-mono text-xs"
+                      disabled={isLoading}
+                    />
+                    <p className="text-xs text-slate-500">
+                      Add key outcomes so the lead agent can measure progress.
+                    </p>
+                    {metricsError ? (
+                      <p className="text-xs text-red-500">{metricsError}</p>
+                    ) : null}
+                  </div>
+
+                  {gateways.length === 0 ? (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      <p>No gateways available. Create one in Gateways to continue.</p>
+                    </div>
+                  ) : null}
+
+                  {error ? <p className="text-sm text-red-500">{error}</p> : null}
+
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => router.push(`/boards/${boardId}`)}
+                      disabled={isLoading}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={isLoading || !board || !isFormReady}>
+                      {isLoading ? "Saving…" : "Save changes"}
+                    </Button>
+                  </div>
+                </form>
               </div>
-            </form>
+              <div className="space-y-6">
+                {boardId ? <BoardApprovalsPanel boardId={boardId} /> : null}
+              </div>
+            </div>
           </div>
         </main>
       </SignedIn>
-    </DashboardShell>
+      </DashboardShell>
+      <Dialog open={isOnboardingOpen} onOpenChange={setIsOnboardingOpen}>
+        <DialogContent aria-label="Board onboarding">
+          {boardId ? (
+            <BoardOnboardingChat
+              boardId={boardId}
+              onConfirmed={handleOnboardingConfirmed}
+            />
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+              Unable to start onboarding.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

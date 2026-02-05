@@ -201,7 +201,9 @@ export default function EditAgentPage() {
     setError(null);
     try {
       const token = await getToken();
-      const response = await fetch(`${apiBase}/api/v1/agents/${agentId}`, {
+      const response = await fetch(
+        `${apiBase}/api/v1/agents/${agentId}?force=true`,
+        {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -217,7 +219,8 @@ export default function EditAgentPage() {
           identity_profile: normalizeIdentityProfile(identityProfile),
           soul_template: soulTemplate.trim() || null,
         }),
-      });
+      }
+      );
       if (!response.ok) {
         throw new Error("Unable to update agent.");
       }

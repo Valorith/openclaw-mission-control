@@ -24,40 +24,40 @@ If any required input is missing, stop and request a provisioning update.
 
 ## Mission Control Response Protocol (mandatory)
 - All outputs must be sent to Mission Control via HTTP.
-- Always include: `X-Agent-Token: $AUTH_TOKEN`
+- Always include: `X-Agent-Token: {{ auth_token }}`
 - Do **not** respond in OpenClaw chat.
 
 ## Pre‑flight checks (before each heartbeat)
 - Confirm BASE_URL, AUTH_TOKEN, and BOARD_ID are set.
 - Verify API access:
   - GET $BASE_URL/healthz must succeed.
-  - GET $BASE_URL/api/v1/boards must succeed.
-  - GET $BASE_URL/api/v1/boards/{BOARD_ID}/tasks must succeed.
+  - GET $BASE_URL/api/v1/agent/boards must succeed.
+  - GET $BASE_URL/api/v1/agent/boards/{BOARD_ID}/tasks must succeed.
 - If any check fails, stop and retry next heartbeat.
 
 ## Heartbeat checklist (run in order)
 1) Check in:
 ```bash
-curl -s -X POST "$BASE_URL/api/v1/agents/heartbeat" \
-  -H "X-Agent-Token: $AUTH_TOKEN" \
+curl -s -X POST "$BASE_URL/api/v1/agent/heartbeat" \
+  -H "X-Agent-Token: {{ auth_token }}" \
   -H "Content-Type: application/json" \
   -d '{"name": "'$AGENT_NAME'", "board_id": "'$BOARD_ID'", "status": "online"}'
 ```
 
 2) List boards:
 ```bash
-curl -s "$BASE_URL/api/v1/boards" \
-  -H "X-Agent-Token: $AUTH_TOKEN"
+curl -s "$BASE_URL/api/v1/agent/boards" \
+  -H "X-Agent-Token: {{ auth_token }}"
 ```
 
 3) For the assigned board, list tasks (use filters to avoid large responses):
 ```bash
-curl -s "$BASE_URL/api/v1/boards/{BOARD_ID}/tasks?status=in_progress&assigned_agent_id=$AGENT_ID&limit=5" \
-  -H "X-Agent-Token: $AUTH_TOKEN"
+curl -s "$BASE_URL/api/v1/agent/boards/{BOARD_ID}/tasks?status=in_progress&assigned_agent_id=$AGENT_ID&limit=5" \
+  -H "X-Agent-Token: {{ auth_token }}"
 ```
 ```bash
-curl -s "$BASE_URL/api/v1/boards/{BOARD_ID}/tasks?status=inbox&unassigned=true&limit=20" \
-  -H "X-Agent-Token: $AUTH_TOKEN"
+curl -s "$BASE_URL/api/v1/agent/boards/{BOARD_ID}/tasks?status=inbox&unassigned=true&limit=20" \
+  -H "X-Agent-Token: {{ auth_token }}"
 ```
 
 4) If you already have an in_progress task, continue working it and do not claim another.
@@ -69,11 +69,11 @@ curl -s "$BASE_URL/api/v1/boards/{BOARD_ID}/tasks?status=inbox&unassigned=true&l
 - Post progress comments as you go.
 - Completion is a two‑step sequence:
 6a) Post the full response as a markdown comment using:
-      POST $BASE_URL/api/v1/boards/{BOARD_ID}/tasks/{TASK_ID}/comments
+      POST $BASE_URL/api/v1/agent/boards/{BOARD_ID}/tasks/{TASK_ID}/comments
     Example:
 ```bash
-curl -s -X POST "$BASE_URL/api/v1/boards/$BOARD_ID/tasks/$TASK_ID/comments" \
-  -H "X-Agent-Token: $AUTH_TOKEN" \
+curl -s -X POST "$BASE_URL/api/v1/agent/boards/$BOARD_ID/tasks/$TASK_ID/comments" \
+  -H "X-Agent-Token: {{ auth_token }}" \
   -H "Content-Type: application/json" \
   -d '{"message":"- Update: ...\n- Result: ..."}'
 ```
@@ -81,8 +81,8 @@ curl -s -X POST "$BASE_URL/api/v1/boards/$BOARD_ID/tasks/$TASK_ID/comments" \
 
 6b) Move the task to "review":
 ```bash
-curl -s -X PATCH "$BASE_URL/api/v1/boards/{BOARD_ID}/tasks/{TASK_ID}" \
-  -H "X-Agent-Token: $AUTH_TOKEN" \
+curl -s -X PATCH "$BASE_URL/api/v1/agent/boards/{BOARD_ID}/tasks/{TASK_ID}" \
+  -H "X-Agent-Token: {{ auth_token }}" \
   -H "Content-Type: application/json" \
   -d '{"status": "review"}'
 ```

@@ -311,7 +311,7 @@ async def _ensure_main_agent(
         await send_message(
             (
                 f"Hello {agent.name}. Your gateway provisioning was updated.\n\n"
-                "Please re-read MAIN_AGENTS.md, MAIN_USER.md, MAIN_HEARTBEAT.md, and MAIN_TOOLS.md. "
+                "Please re-read AGENTS.md, USER.md, HEARTBEAT.md, and TOOLS.md. "
                 "If BOOTSTRAP.md exists, run it once then delete it. Begin heartbeats after startup."
             ),
             session_key=gateway.main_session_key,

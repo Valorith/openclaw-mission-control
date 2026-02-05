@@ -31,6 +31,7 @@ type Agent = {
   created_at: string;
   updated_at: string;
   board_id?: string | null;
+  is_board_lead?: boolean;
 };
 
 type Board = {
@@ -105,6 +106,7 @@ export default function AgentDetailPage() {
     if (!agent?.board_id) return null;
     return boards.find((board) => board.id === agent.board_id) ?? null;
   }, [boards, agent?.board_id]);
+
 
   const loadAgent = async () => {
     if (!isSignedIn || !agentId) return;

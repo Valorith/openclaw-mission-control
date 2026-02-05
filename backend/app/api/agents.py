@@ -301,6 +301,7 @@ def get_agent(
 async def update_agent(
     agent_id: str,
     payload: AgentUpdate,
+    force: bool = False,
     session: Session = Depends(get_session),
     auth: AuthContext = Depends(require_admin_auth),
 ) -> Agent:
@@ -321,7 +322,7 @@ async def update_agent(
         updates["identity_profile"] = _normalize_identity_profile(
             updates.get("identity_profile")
         )
-    if not updates:
+    if not updates and not force:
         return _with_computed_status(agent)
     if "board_id" in updates:
         _require_board(session, updates["board_id"])
@@ -380,9 +381,17 @@ async def update_agent(
     except OpenClawGatewayError as exc:
         _record_instruction_failure(session, agent, str(exc), "update")
         session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Gateway update failed: {exc}",
+        ) from exc
     except Exception as exc:  # pragma: no cover - unexpected provisioning errors
         _record_instruction_failure(session, agent, str(exc), "update")
         session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected error updating agent provisioning.",
+        ) from exc
     return _with_computed_status(agent)
 
 

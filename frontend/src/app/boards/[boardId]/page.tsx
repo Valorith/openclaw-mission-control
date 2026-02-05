@@ -7,9 +7,6 @@ import { SignInButton, SignedIn, SignedOut, useAuth } from "@clerk/nextjs";
 import { X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
-import { BoardApprovalsPanel } from "@/components/BoardApprovalsPanel";
-import { BoardGoalPanel } from "@/components/BoardGoalPanel";
-import { BoardOnboardingChat } from "@/components/BoardOnboardingChat";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
 import { DashboardShell } from "@/components/templates/DashboardShell";
@@ -62,6 +59,10 @@ type Agent = {
   name: string;
   status: string;
   board_id?: string | null;
+  is_board_lead?: boolean;
+  identity_profile?: {
+    emoji?: string | null;
+  } | null;
 };
 
 type TaskComment = {
@@ -79,6 +80,19 @@ const priorities = [
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
 ];
+
+const EMOJI_GLYPHS: Record<string, string> = {
+  ":gear:": "⚙️",
+  ":sparkles:": "✨",
+  ":rocket:": "🚀",
+  ":megaphone:": "📣",
+  ":chart_with_upwards_trend:": "📈",
+  ":bulb:": "💡",
+  ":wrench:": "🔧",
+  ":shield:": "🛡️",
+  ":memo:": "📝",
+  ":brain:": "🧠",
+};
 
 export default function BoardDetailPage() {
   const router = useRouter();
@@ -100,8 +114,6 @@ export default function BoardDetailPage() {
   const tasksRef = useRef<Task[]>([]);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
-  const [hasPromptedOnboarding, setHasPromptedOnboarding] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -278,21 +290,6 @@ export default function BoardDetailPage() {
     };
   }, [board, boardId, getToken, isSignedIn, selectedTask?.id]);
 
-  useEffect(() => {
-    if (!board) return;
-    if (board.board_type === "general") {
-      setIsOnboardingOpen(false);
-      return;
-    }
-    if (!board.goal_confirmed && !hasPromptedOnboarding) {
-      setIsOnboardingOpen(true);
-      setHasPromptedOnboarding(true);
-    }
-    if (board.goal_confirmed) {
-      setIsOnboardingOpen(false);
-    }
-  }, [board, hasPromptedOnboarding]);
-
   const resetForm = () => {
     setTitle("");
     setDescription("");
@@ -427,19 +424,29 @@ export default function BoardDetailPage() {
     setCommentsError(null);
   };
 
-  const handleOnboardingConfirmed = (updated: Board) => {
-    setBoard(updated);
-    setIsOnboardingOpen(false);
-  };
-
-  const agentInitials = (name: string) =>
-    name
+  const agentInitials = (agent: Agent) =>
+    agent.name
       .split(" ")
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0])
       .join("")
       .toUpperCase();
+
+  const resolveEmoji = (value?: string | null) => {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (EMOJI_GLYPHS[trimmed]) return EMOJI_GLYPHS[trimmed];
+    if (trimmed.startsWith(":") && trimmed.endsWith(":")) return null;
+    return trimmed;
+  };
+
+  const agentAvatarLabel = (agent: Agent) => {
+    if (agent.is_board_lead) return "⚙️";
+    const emoji = resolveEmoji(agent.identity_profile?.emoji ?? null);
+    return emoji ?? agentInitials(agent);
+  };
 
   const agentStatusLabel = (agent: Agent) => {
     if (workingAgentIds.has(agent.id)) return "Working";
@@ -502,6 +509,15 @@ export default function BoardDetailPage() {
                       Timeline
                     </button>
                   </div>
+                  <Button onClick={() => setIsDialogOpen(true)}>
+                    New task
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/boards/${boardId}/edit`)}
+                  >
+                    Board settings
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={() => router.push("/boards")}
@@ -541,14 +557,16 @@ export default function BoardDetailPage() {
                   sortedAgents.map((agent) => {
                     const isWorking = workingAgentIds.has(agent.id);
                     return (
-                      <div
+                      <button
                         key={agent.id}
+                        type="button"
                         className={cn(
-                          "flex items-center gap-3 rounded-lg border border-transparent px-2 py-2 transition hover:border-slate-200 hover:bg-slate-50",
+                          "flex w-full items-center gap-3 rounded-lg border border-transparent px-2 py-2 text-left transition hover:border-slate-200 hover:bg-slate-50",
                         )}
+                        onClick={() => router.push(`/agents/${agent.id}`)}
                       >
                         <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
-                          {agentInitials(agent.name)}
+                          {agentAvatarLabel(agent)}
                           <span
                             className={cn(
                               "absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white",
@@ -568,7 +586,7 @@ export default function BoardDetailPage() {
                             {agentStatusLabel(agent)}
                           </p>
                         </div>
-                      </div>
+                      </button>
                     );
                   })
                 )}
@@ -576,17 +594,6 @@ export default function BoardDetailPage() {
             </aside>
 
             <div className="min-w-0 flex-1 space-y-6">
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                <BoardGoalPanel
-                  board={board}
-                  onStartOnboarding={() => setIsOnboardingOpen(true)}
-                  onEdit={
-                    boardId ? () => router.push(`/boards/${boardId}/edit`) : undefined
-                  }
-                />
-                {boardId ? <BoardApprovalsPanel boardId={boardId} /> : null}
-              </div>
-
               {error && (
                 <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 shadow-sm">
                   {error}
@@ -789,28 +796,7 @@ export default function BoardDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={isOnboardingOpen}
-        onOpenChange={(nextOpen) => {
-          setIsOnboardingOpen(nextOpen);
-          if (!nextOpen) {
-            setHasPromptedOnboarding(true);
-          }
-        }}
-      >
-        <DialogContent aria-label="Board onboarding">
-          {boardId ? (
-            <BoardOnboardingChat
-              boardId={boardId}
-              onConfirmed={handleOnboardingConfirmed}
-            />
-          ) : (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-              Unable to start onboarding.
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* onboarding moved to board settings */}
     </DashboardShell>
   );
 }

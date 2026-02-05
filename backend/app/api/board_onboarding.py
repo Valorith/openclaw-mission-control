@@ -6,20 +6,16 @@ from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+import logging
 from sqlmodel import Session, select
 
-from app.api.deps import get_board_or_404, require_admin_auth
+from app.api.deps import ActorContext, get_board_or_404, require_admin_auth, require_admin_or_agent
 from app.core.agent_tokens import generate_agent_token, hash_agent_token
 from app.core.auth import AuthContext
 from app.core.config import settings
 from app.db.session import get_session
 from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
-from app.integrations.openclaw_gateway import (
-    OpenClawGatewayError,
-    ensure_session,
-    get_chat_history,
-    send_message,
-)
+from app.integrations.openclaw_gateway import OpenClawGatewayError, ensure_session, send_message
 from app.models.agents import Agent
 from app.models.board_onboarding import BoardOnboardingSession
 from app.models.boards import Board
@@ -34,59 +30,8 @@ from app.schemas.boards import BoardRead
 from app.services.agent_provisioning import DEFAULT_HEARTBEAT_CONFIG, provision_agent
 
 router = APIRouter(prefix="/boards/{board_id}/onboarding", tags=["board-onboarding"])
+logger = logging.getLogger(__name__)
 
-def _extract_json(text: str) -> dict[str, object] | None:
-    try:
-        return json.loads(text.strip())
-    except Exception:
-        pass
-    match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-    if match:
-        try:
-            return json.loads(match.group(1).strip())
-        except Exception:
-            pass
-    first = text.find("{")
-    last = text.rfind("}")
-    if first != -1 and last > first:
-        try:
-            return json.loads(text[first : last + 1])
-        except Exception:
-            return None
-    return None
-
-
-def _extract_text(content: object) -> str | None:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        for entry in content:
-            if isinstance(entry, dict) and entry.get("type") == "text":
-                text = entry.get("text")
-                if isinstance(text, str):
-                    return text
-    if isinstance(content, dict):
-        text = content.get("text")
-        if isinstance(text, str):
-            return text
-    return None
-
-
-def _get_assistant_messages(history: object) -> list[str]:
-    messages: list[str] = []
-    if isinstance(history, dict):
-        history = history.get("messages")
-    if not isinstance(history, list):
-        return messages
-    for msg in history:
-        if not isinstance(msg, dict):
-            continue
-        if msg.get("role") != "assistant":
-            continue
-        text = _extract_text(msg.get("content"))
-        if text:
-            messages.append(text)
-    return messages
 
 
 def _gateway_config(session: Session, board: Board) -> tuple[Gateway, GatewayClientConfig]:
@@ -104,7 +49,11 @@ def _build_session_key(agent_name: str) -> str:
 
 
 def _lead_agent_name(board: Board) -> str:
-    return f"{board.name} Lead"
+    return "Lead Agent"
+
+
+def _lead_session_key(board: Board) -> str:
+    return f"agent:lead-{board.id}:main"
 
 
 async def _ensure_lead_agent(
@@ -120,6 +69,11 @@ async def _ensure_lead_agent(
         .where(Agent.is_board_lead.is_(True))
     ).first()
     if existing:
+        if existing.name != _lead_agent_name(board):
+            existing.name = _lead_agent_name(board)
+            session.add(existing)
+            session.commit()
+            session.refresh(existing)
         return existing
 
     agent = Agent(
@@ -131,14 +85,14 @@ async def _ensure_lead_agent(
         identity_profile={
             "role": "Board Lead",
             "communication_style": "direct, concise, practical",
-            "emoji": ":compass:",
+            "emoji": ":gear:",
         },
     )
     raw_token = generate_agent_token()
     agent.agent_token_hash = hash_agent_token(raw_token)
     agent.provision_requested_at = datetime.utcnow()
     agent.provision_action = "provision"
-    agent.openclaw_session_id = _build_session_key(agent.name)
+    agent.openclaw_session_id = _lead_session_key(board)
     session.add(agent)
     session.commit()
     session.refresh(agent)
@@ -200,17 +154,28 @@ async def start_onboarding(
         "BOARD ONBOARDING REQUEST\n\n"
         f"Board Name: {board.name}\n"
         "You are the main agent. Ask the user 3-6 focused questions to clarify their goal.\n"
-        "Only respond in OpenClaw chat with onboarding JSON. All other outputs must be sent to Mission Control via API.\n"
+        "Do NOT respond in OpenClaw chat.\n"
+        "All onboarding responses MUST be sent to Mission Control via API.\n"
         f"Mission Control base URL: {base_url}\n"
-        "Use the AUTH_TOKEN from MAIN_USER.md or MAIN_TOOLS.md and pass it as X-Agent-Token.\n"
-        "Example API call (for non-onboarding updates):\n"
-        f"curl -s -X POST \"{base_url}/api/v1/boards/{board.id}/memory\" "
+        "Use the AUTH_TOKEN from USER.md or TOOLS.md and pass it as X-Agent-Token.\n"
+        "Onboarding response endpoint:\n"
+        f"POST {base_url}/api/v1/agent/boards/{board.id}/onboarding\n"
+        "QUESTION example (send JSON body exactly as shown):\n"
+        f"curl -s -X POST \"{base_url}/api/v1/agent/boards/{board.id}/onboarding\" "
         "-H \"X-Agent-Token: $AUTH_TOKEN\" "
         "-H \"Content-Type: application/json\" "
-        "-d '{\"content\":\"Onboarding update...\",\"tags\":[\"onboarding\"],\"source\":\"main_agent\"}'\n"
-        "Return questions as JSON: {\"question\": \"...\", \"options\": [...]}.\n"
-        "When you have enough info, return JSON: {\"status\": \"complete\", \"board_type\": \"goal\"|\"general\", "
-        "\"objective\": \"...\", \"success_metrics\": {...}, \"target_date\": \"YYYY-MM-DD\"}."
+        "-d '{\"question\":\"...\",\"options\":[{\"id\":\"1\",\"label\":\"...\"},{\"id\":\"2\",\"label\":\"...\"}]}'\n"
+        "COMPLETION example (send JSON body exactly as shown):\n"
+        f"curl -s -X POST \"{base_url}/api/v1/agent/boards/{board.id}/onboarding\" "
+        "-H \"X-Agent-Token: $AUTH_TOKEN\" "
+        "-H \"Content-Type: application/json\" "
+        "-d '{\"status\":\"complete\",\"board_type\":\"goal\",\"objective\":\"...\",\"success_metrics\":{...},\"target_date\":\"YYYY-MM-DD\"}'\n"
+        "QUESTION FORMAT (one question per response, no arrays, no markdown, no extra text):\n"
+        "{\"question\":\"...\",\"options\":[{\"id\":\"1\",\"label\":\"...\"},{\"id\":\"2\",\"label\":\"...\"}]}\n"
+        "Do NOT wrap questions in a list. Do NOT add commentary.\n"
+        "When you have enough info, return JSON ONLY (via API):\n"
+        "{\"status\":\"complete\",\"board_type\":\"goal\"|\"general\",\"objective\":\"...\","
+        "\"success_metrics\":{...},\"target_date\":\"YYYY-MM-DD\"}."
     )
 
     try:
@@ -251,7 +216,7 @@ async def answer_onboarding(
     if payload.other_text:
         answer_text = f"{payload.answer}: {payload.other_text}"
 
-    messages = onboarding.messages or []
+    messages = list(onboarding.messages or [])
     messages.append(
         {"role": "user", "content": answer_text, "timestamp": datetime.utcnow().isoformat()}
     )
@@ -261,26 +226,78 @@ async def answer_onboarding(
         await send_message(
             answer_text, session_key=onboarding.session_key, config=config, deliver=False
         )
-        history = await get_chat_history(onboarding.session_key, config=config)
     except OpenClawGatewayError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-    assistant_messages = _get_assistant_messages(history)
-    if assistant_messages:
-        last = assistant_messages[-1]
-        messages.append(
-            {"role": "assistant", "content": last, "timestamp": datetime.utcnow().isoformat()}
-        )
-        parsed = _extract_json(last)
-        if parsed and parsed.get("status") == "complete":
-            onboarding.draft_goal = parsed
-            onboarding.status = "completed"
 
     onboarding.messages = messages
     onboarding.updated_at = datetime.utcnow()
     session.add(onboarding)
     session.commit()
     session.refresh(onboarding)
+    return onboarding
+
+
+@router.post("/agent", response_model=BoardOnboardingRead)
+def agent_onboarding_update(
+    payload: dict[str, object],
+    board: Board = Depends(get_board_or_404),
+    session: Session = Depends(get_session),
+    actor: ActorContext = Depends(require_admin_or_agent),
+) -> BoardOnboardingSession:
+    if actor.actor_type != "agent" or actor.agent is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    agent = actor.agent
+    if agent.board_id is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    if board.gateway_id:
+        gateway = session.get(Gateway, board.gateway_id)
+        if gateway and gateway.main_session_key and agent.openclaw_session_id:
+            if agent.openclaw_session_id != gateway.main_session_key:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    onboarding = session.exec(
+        select(BoardOnboardingSession)
+        .where(BoardOnboardingSession.board_id == board.id)
+        .order_by(BoardOnboardingSession.created_at.desc())
+    ).first()
+    if onboarding is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if onboarding.status == "confirmed":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT)
+
+    messages = list(onboarding.messages or [])
+    now = datetime.utcnow().isoformat()
+    payload_text = json.dumps(payload)
+    logger.info(
+        "onboarding.agent.update board_id=%s agent_id=%s payload=%s",
+        board.id,
+        agent.id,
+        payload_text,
+    )
+    payload_status = payload.get("status")
+    if payload_status == "complete":
+        onboarding.draft_goal = payload
+        onboarding.status = "completed"
+        messages.append({"role": "assistant", "content": payload_text, "timestamp": now})
+    else:
+        question = payload.get("question")
+        options = payload.get("options")
+        if not isinstance(question, str) or not isinstance(options, list):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        messages.append({"role": "assistant", "content": payload_text, "timestamp": now})
+
+    onboarding.messages = messages
+    onboarding.updated_at = datetime.utcnow()
+    session.add(onboarding)
+    session.commit()
+    session.refresh(onboarding)
+    logger.info(
+        "onboarding.agent.update stored board_id=%s messages_count=%s status=%s",
+        board.id,
+        len(onboarding.messages or []),
+        onboarding.status,
+    )
     return onboarding
 
 

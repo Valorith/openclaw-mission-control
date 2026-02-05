@@ -33,6 +33,7 @@ class AgentUpdate(SQLModel):
 
 class AgentRead(AgentBase):
     id: UUID
+    is_board_lead: bool = False
     openclaw_session_id: str | None = None
     last_seen_at: datetime | None
     created_at: datetime
