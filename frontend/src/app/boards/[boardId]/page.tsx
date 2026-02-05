@@ -7,6 +7,7 @@ import { SignInButton, SignedIn, SignedOut, useAuth } from "@clerk/nextjs";
 import { X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
+import { BoardApprovalsPanel } from "@/components/BoardApprovalsPanel";
 import { BoardGoalPanel } from "@/components/BoardGoalPanel";
 import { BoardOnboardingChat } from "@/components/BoardOnboardingChat";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
@@ -575,7 +576,7 @@ export default function BoardDetailPage() {
             </aside>
 
             <div className="min-w-0 flex-1 space-y-6">
-              <div className="grid gap-4">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <BoardGoalPanel
                   board={board}
                   onStartOnboarding={() => setIsOnboardingOpen(true)}
@@ -583,6 +584,7 @@ export default function BoardDetailPage() {
                     boardId ? () => router.push(`/boards/${boardId}/edit`) : undefined
                   }
                 />
+                {boardId ? <BoardApprovalsPanel boardId={boardId} /> : null}
               </div>
 
               {error && (
