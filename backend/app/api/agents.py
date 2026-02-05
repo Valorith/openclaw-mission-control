@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import asyncio
+import json
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import update
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import asc, or_, update
 from sqlmodel import Session, col, select
+from sse_starlette.sse import EventSourceResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import ActorContext, require_admin_auth, require_admin_or_agent
 from app.core.agent_tokens import generate_agent_token, hash_agent_token
 from app.core.auth import AuthContext
-from app.db.session import get_session
+from app.db.session import engine, get_session
 from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
 from app.integrations.openclaw_gateway import OpenClawGatewayError, ensure_session, send_message
 from app.models.activity_events import ActivityEvent
@@ -32,6 +36,22 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 OFFLINE_AFTER = timedelta(minutes=10)
 AGENT_SESSION_PREFIX = "agent"
+
+
+def _parse_since(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    normalized = normalized.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def _normalize_identity_profile(
@@ -172,6 +192,30 @@ def _with_computed_status(agent: Agent) -> Agent:
     return agent
 
 
+def _serialize_agent(agent: Agent, main_session_keys: set[str]) -> dict[str, object]:
+    return _to_agent_read(_with_computed_status(agent), main_session_keys).model_dump()
+
+
+def _fetch_agent_events(
+    board_id: UUID | None,
+    since: datetime,
+) -> list[Agent]:
+    with Session(engine) as session:
+        statement = select(Agent)
+        if board_id:
+            statement = statement.where(col(Agent.board_id) == board_id)
+        statement = (
+            statement.where(
+                or_(
+                    col(Agent.updated_at) >= since,
+                    col(Agent.last_seen_at) >= since,
+                )
+            )
+            .order_by(asc(col(Agent.updated_at)))
+        )
+        return list(session.exec(statement))
+
+
 def _record_heartbeat(session: Session, agent: Agent) -> None:
     record_activity(
         session,
@@ -215,6 +259,36 @@ def list_agents(
         _to_agent_read(_with_computed_status(agent), main_session_keys)
         for agent in agents
     ]
+
+
+@router.get("/stream")
+async def stream_agents(
+    request: Request,
+    board_id: UUID | None = Query(default=None),
+    since: str | None = Query(default=None),
+    auth: AuthContext = Depends(require_admin_auth),
+) -> EventSourceResponse:
+    since_dt = _parse_since(since) or datetime.utcnow()
+    last_seen = since_dt
+
+    async def event_generator():
+        nonlocal last_seen
+        while True:
+            if await request.is_disconnected():
+                break
+            agents = await run_in_threadpool(_fetch_agent_events, board_id, last_seen)
+            if agents:
+                with Session(engine) as session:
+                    main_session_keys = _get_gateway_main_session_keys(session)
+                    for agent in agents:
+                        updated_at = agent.updated_at or agent.last_seen_at or datetime.utcnow()
+                        if updated_at > last_seen:
+                            last_seen = updated_at
+                        payload = {"agent": _serialize_agent(agent, main_session_keys)}
+                        yield {"event": "agent", "data": json.dumps(payload)}
+            await asyncio.sleep(2)
+
+    return EventSourceResponse(event_generator(), ping=15)
 
 
 @router.post("", response_model=AgentRead)

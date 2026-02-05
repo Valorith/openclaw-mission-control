@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { SignInButton, SignedIn, SignedOut, useAuth } from "@clerk/nextjs";
-import { Pencil, X } from "lucide-react";
+import { Pencil, Settings, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 import { BoardApprovalsPanel } from "@/components/BoardApprovalsPanel";
@@ -61,6 +61,8 @@ type Agent = {
   status: string;
   board_id?: string | null;
   is_board_lead?: boolean;
+  updated_at?: string | null;
+  last_seen_at?: string | null;
   identity_profile?: {
     emoji?: string | null;
   } | null;
@@ -130,8 +132,11 @@ export default function BoardDetailPage() {
   const [commentsError, setCommentsError] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const tasksRef = useRef<Task[]>([]);
+  const approvalsRef = useRef<Approval[]>([]);
+  const agentsRef = useRef<Agent[]>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [isApprovalsLoading, setIsApprovalsLoading] = useState(false);
@@ -139,6 +144,9 @@ export default function BoardDetailPage() {
   const [approvalsUpdatingId, setApprovalsUpdatingId] = useState<string | null>(
     null,
   );
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
+  const [deleteTaskError, setDeleteTaskError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"board" | "list">("board");
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -164,6 +172,32 @@ export default function BoardDetailPage() {
     let latestTime = 0;
     items.forEach((task) => {
       const value = task.updated_at ?? task.created_at;
+      if (!value) return;
+      const time = new Date(value).getTime();
+      if (!Number.isNaN(time) && time > latestTime) {
+        latestTime = time;
+      }
+    });
+    return latestTime ? new Date(latestTime).toISOString() : null;
+  };
+
+  const latestApprovalTimestamp = (items: Approval[]) => {
+    let latestTime = 0;
+    items.forEach((approval) => {
+      const value = approval.resolved_at ?? approval.created_at;
+      if (!value) return;
+      const time = new Date(value).getTime();
+      if (!Number.isNaN(time) && time > latestTime) {
+        latestTime = time;
+      }
+    });
+    return latestTime ? new Date(latestTime).toISOString() : null;
+  };
+
+  const latestAgentTimestamp = (items: Agent[]) => {
+    let latestTime = 0;
+    items.forEach((agent) => {
+      const value = agent.updated_at ?? agent.last_seen_at;
       if (!value) return;
       const time = new Date(value).getTime();
       if (!Number.isNaN(time) && time > latestTime) {
@@ -229,6 +263,14 @@ export default function BoardDetailPage() {
     tasksRef.current = tasks;
   }, [tasks]);
 
+  useEffect(() => {
+    approvalsRef.current = approvals;
+  }, [approvals]);
+
+  useEffect(() => {
+    agentsRef.current = agents;
+  }, [agents]);
+
   const loadApprovals = useCallback(async () => {
     if (!isSignedIn || !boardId) return;
     setIsApprovalsLoading(true);
@@ -259,10 +301,95 @@ export default function BoardDetailPage() {
 
   useEffect(() => {
     loadApprovals();
-    if (!isSignedIn || !boardId) return;
-    const interval = setInterval(loadApprovals, 15000);
-    return () => clearInterval(interval);
   }, [boardId, isSignedIn, loadApprovals]);
+
+  useEffect(() => {
+    if (!isSignedIn || !boardId) return;
+    let isCancelled = false;
+    const abortController = new AbortController();
+
+    const connect = async () => {
+      try {
+        const token = await getToken();
+        if (!token || isCancelled) return;
+        const url = new URL(
+          `${apiBase}/api/v1/boards/${boardId}/approvals/stream`,
+        );
+        const since = latestApprovalTimestamp(approvalsRef.current);
+        if (since) {
+          url.searchParams.set("since", since);
+        }
+        const response = await fetch(url.toString(), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: abortController.signal,
+        });
+        if (!response.ok || !response.body) {
+          throw new Error("Unable to connect approvals stream.");
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (!isCancelled) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          buffer = buffer.replace(/\r\n/g, "\n");
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary !== -1) {
+            const raw = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const lines = raw.split("\n");
+            let eventType = "message";
+            let data = "";
+            for (const line of lines) {
+              if (line.startsWith("event:")) {
+                eventType = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                data += line.slice(5).trim();
+              }
+            }
+            if (eventType === "approval" && data) {
+              try {
+                const payload = JSON.parse(data) as { approval?: Approval };
+                if (payload.approval) {
+                  setApprovals((prev) => {
+                    const index = prev.findIndex(
+                      (item) => item.id === payload.approval?.id,
+                    );
+                    if (index === -1) {
+                      return [payload.approval as Approval, ...prev];
+                    }
+                    const next = [...prev];
+                    next[index] = {
+                      ...next[index],
+                      ...(payload.approval as Approval),
+                    };
+                    return next;
+                  });
+                }
+              } catch {
+                // Ignore malformed payloads.
+              }
+            }
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+      } catch {
+        if (!isCancelled) {
+          setTimeout(connect, 3000);
+        }
+      }
+    };
+
+    connect();
+    return () => {
+      isCancelled = true;
+      abortController.abort();
+    };
+  }, [boardId, getToken, isSignedIn]);
 
   useEffect(() => {
     if (!selectedTask) {
@@ -377,6 +504,93 @@ export default function BoardDetailPage() {
       abortController.abort();
     };
   }, [board, boardId, getToken, isSignedIn, selectedTask?.id]);
+
+  useEffect(() => {
+    if (!isSignedIn || !boardId) return;
+    let isCancelled = false;
+    const abortController = new AbortController();
+
+    const connect = async () => {
+      try {
+        const token = await getToken();
+        if (!token || isCancelled) return;
+        const url = new URL(`${apiBase}/api/v1/agents/stream`);
+        url.searchParams.set("board_id", boardId);
+        const since = latestAgentTimestamp(agentsRef.current);
+        if (since) {
+          url.searchParams.set("since", since);
+        }
+        const response = await fetch(url.toString(), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: abortController.signal,
+        });
+        if (!response.ok || !response.body) {
+          throw new Error("Unable to connect agent stream.");
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (!isCancelled) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          buffer = buffer.replace(/\r\n/g, "\n");
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary !== -1) {
+            const raw = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const lines = raw.split("\n");
+            let eventType = "message";
+            let data = "";
+            for (const line of lines) {
+              if (line.startsWith("event:")) {
+                eventType = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                data += line.slice(5).trim();
+              }
+            }
+            if (eventType === "agent" && data) {
+              try {
+                const payload = JSON.parse(data) as { agent?: Agent };
+                if (payload.agent) {
+                  setAgents((prev) => {
+                    const index = prev.findIndex(
+                      (item) => item.id === payload.agent?.id,
+                    );
+                    if (index === -1) {
+                      return [payload.agent as Agent, ...prev];
+                    }
+                    const next = [...prev];
+                    next[index] = {
+                      ...next[index],
+                      ...(payload.agent as Agent),
+                    };
+                    return next;
+                  });
+                }
+              } catch {
+                // Ignore malformed payloads.
+              }
+            }
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+      } catch {
+        if (!isCancelled) {
+          setTimeout(connect, 3000);
+        }
+      }
+    };
+
+    connect();
+    return () => {
+      isCancelled = true;
+      abortController.abort();
+    };
+  }, [boardId, getToken, isSignedIn]);
 
   const resetForm = () => {
     setTitle("");
@@ -622,6 +836,79 @@ export default function BoardDetailPage() {
     setSaveTaskError(null);
   };
 
+  const handleDeleteTask = async () => {
+    if (!selectedTask || !boardId || !isSignedIn) return;
+    setIsDeletingTask(true);
+    setDeleteTaskError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        `${apiBase}/api/v1/boards/${boardId}/tasks/${selectedTask.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+        },
+      );
+      if (!response.ok) {
+        throw new Error("Unable to delete task.");
+      }
+      setTasks((prev) => prev.filter((task) => task.id !== selectedTask.id));
+      setIsDeleteDialogOpen(false);
+      closeComments();
+    } catch (err) {
+      setDeleteTaskError(
+        err instanceof Error ? err.message : "Something went wrong.",
+      );
+    } finally {
+      setIsDeletingTask(false);
+    }
+  };
+
+  const handleTaskMove = async (taskId: string, status: string) => {
+    if (!isSignedIn || !boardId) return;
+    const currentTask = tasksRef.current.find((task) => task.id === taskId);
+    if (!currentTask || currentTask.status === status) return;
+    const previousTasks = tasksRef.current;
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              status,
+              assigned_agent_id:
+                status === "inbox" ? null : task.assigned_agent_id,
+            }
+          : task,
+      ),
+    );
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        `${apiBase}/api/v1/boards/${boardId}/tasks/${taskId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+          body: JSON.stringify({ status }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error("Unable to move task.");
+      }
+      const updated = (await response.json()) as Task;
+      setTasks((prev) =>
+        prev.map((task) => (task.id === updated.id ? updated : task)),
+      );
+    } catch (err) {
+      setTasks(previousTasks);
+      setError(err instanceof Error ? err.message : "Unable to move task.");
+    }
+  };
+
   const agentInitials = (agent: Agent) =>
     agent.name
       .split(" ")
@@ -664,6 +951,44 @@ export default function BoardDetailPage() {
     });
   };
 
+  const formatTaskTimestamp = (value?: string | null) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const statusBadgeClass = (value?: string) => {
+    switch (value) {
+      case "in_progress":
+        return "bg-purple-100 text-purple-700";
+      case "review":
+        return "bg-indigo-100 text-indigo-700";
+      case "done":
+        return "bg-emerald-100 text-emerald-700";
+      default:
+        return "bg-slate-100 text-slate-600";
+    }
+  };
+
+  const priorityBadgeClass = (value?: string) => {
+    switch (value?.toLowerCase()) {
+      case "high":
+        return "bg-rose-100 text-rose-700";
+      case "medium":
+        return "bg-amber-100 text-amber-700";
+      case "low":
+        return "bg-emerald-100 text-emerald-700";
+      default:
+        return "bg-slate-100 text-slate-600";
+    }
+  };
+
   const formatApprovalTimestamp = (value?: string | null) => {
     if (!value) return "—";
     const date = new Date(value);
@@ -675,6 +1000,56 @@ export default function BoardDetailPage() {
       minute: "2-digit",
     });
   };
+
+  const humanizeApprovalAction = (value: string) =>
+    value
+      .split(".")
+      .map((part) =>
+        part
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase())
+      )
+      .join(" · ");
+
+  const approvalPayloadValue = (
+    payload: Approval["payload"],
+    key: string,
+  ) => {
+    if (!payload) return null;
+    const value = payload[key as keyof typeof payload];
+    if (typeof value === "string" || typeof value === "number") {
+      return String(value);
+    }
+    return null;
+  };
+
+  const approvalRows = (approval: Approval) => {
+    const payload = approval.payload ?? {};
+    const taskId =
+      approvalPayloadValue(payload, "task_id") ??
+      approvalPayloadValue(payload, "taskId") ??
+      approvalPayloadValue(payload, "taskID");
+    const assignedAgentId =
+      approvalPayloadValue(payload, "assigned_agent_id") ??
+      approvalPayloadValue(payload, "assignedAgentId");
+    const title = approvalPayloadValue(payload, "title");
+    const role = approvalPayloadValue(payload, "role");
+    const isAssign = approval.action_type.includes("assign");
+    const rows: Array<{ label: string; value: string }> = [];
+    if (taskId) rows.push({ label: "Task", value: taskId });
+    if (isAssign) {
+      rows.push({
+        label: "Assignee",
+        value: assignedAgentId ?? "Unassigned",
+      });
+    }
+    if (title) rows.push({ label: "Title", value: title });
+    if (role) rows.push({ label: "Role", value: role });
+    return rows;
+  };
+
+  const approvalReason = (approval: Approval) =>
+    approvalPayloadValue(approval.payload ?? {}, "reason");
 
   const handleApprovalDecision = useCallback(
     async (approvalId: string, status: "approved" | "rejected") => {
@@ -745,14 +1120,27 @@ export default function BoardDetailPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
-                    <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white">
+                    <button
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                        viewMode === "board"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-600 hover:bg-slate-200 hover:text-slate-900",
+                      )}
+                      onClick={() => setViewMode("board")}
+                    >
                       Board
                     </button>
-                    <button className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900">
+                    <button
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                        viewMode === "list"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-600 hover:bg-slate-200 hover:text-slate-900",
+                      )}
+                      onClick={() => setViewMode("list")}
+                    >
                       List
-                    </button>
-                    <button className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900">
-                      Timeline
                     </button>
                   </div>
                   <Button onClick={() => setIsDialogOpen(true)}>
@@ -770,18 +1158,15 @@ export default function BoardDetailPage() {
                       </span>
                     ) : null}
                   </Button>
-                  <Button
-                    variant="outline"
+                  <button
+                    type="button"
                     onClick={() => router.push(`/boards/${boardId}/edit`)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                    aria-label="Board settings"
+                    title="Board settings"
                   >
-                    Board settings
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push("/boards")}
-                  >
-                    Back to boards
-                  </Button>
+                    <Settings className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -863,12 +1248,98 @@ export default function BoardDetailPage() {
                   Loading {titleLabel}…
                 </div>
               ) : (
-                <TaskBoard
-                  tasks={displayTasks}
-                  onCreateTask={() => setIsDialogOpen(true)}
-                  isCreateDisabled={isCreating}
-                  onTaskSelect={openComments}
-                />
+                <>
+                  {viewMode === "board" ? (
+                    <TaskBoard
+                      tasks={displayTasks}
+                      onCreateTask={() => setIsDialogOpen(true)}
+                      isCreateDisabled={isCreating}
+                      onTaskSelect={openComments}
+                      onTaskMove={handleTaskMove}
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <div className="border-b border-slate-200 px-5 py-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              All tasks
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {displayTasks.length} tasks in this board
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsDialogOpen(true)}
+                            disabled={isCreating}
+                          >
+                            New task
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {displayTasks.length === 0 ? (
+                          <div className="px-5 py-8 text-sm text-slate-500">
+                            No tasks yet. Create your first task to get started.
+                          </div>
+                        ) : (
+                          displayTasks.map((task) => (
+                            <button
+                              key={task.id}
+                              type="button"
+                              className="w-full px-5 py-4 text-left transition hover:bg-slate-50"
+                              onClick={() => openComments(task)}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-slate-900">
+                                    {task.title}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {task.description
+                                      ? task.description
+                                          .toString()
+                                          .trim()
+                                          .slice(0, 120)
+                                      : "No description"}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                                  <span
+                                    className={cn(
+                                      "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                                      statusBadgeClass(task.status),
+                                    )}
+                                  >
+                                    {task.status.replace(/_/g, " ")}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                                      priorityBadgeClass(task.priority),
+                                    )}
+                                  >
+                                    {task.priority}
+                                  </span>
+                                  <span className="text-xs text-slate-500">
+                                    {task.assignee ?? "Unassigned"}
+                                  </span>
+                                  <span className="text-xs text-slate-500">
+                                    {formatTaskTimestamp(
+                                      task.updated_at ?? task.created_at,
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -956,7 +1427,7 @@ export default function BoardDetailPage() {
                       <div className="flex flex-wrap items-start justify-between gap-2 text-xs text-slate-500">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                            {approval.action_type.replace(/_/g, " ")}
+                            {humanizeApprovalAction(approval.action_type)}
                           </p>
                           <p className="mt-1 text-xs text-slate-500">
                             Requested {formatApprovalTimestamp(approval.created_at)}
@@ -966,10 +1437,24 @@ export default function BoardDetailPage() {
                           {approval.confidence}% confidence · {approval.status}
                         </span>
                       </div>
-                      {approval.payload ? (
-                        <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-600">
-                          {JSON.stringify(approval.payload, null, 2)}
-                        </pre>
+                      {approvalRows(approval).length > 0 ? (
+                        <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                          {approvalRows(approval).map((row) => (
+                            <div key={`${approval.id}-${row.label}`}>
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                {row.label}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-700">
+                                {row.value}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {approvalReason(approval) ? (
+                        <p className="mt-2 text-xs text-slate-600">
+                          {approvalReason(approval)}
+                        </p>
                       ) : null}
                       {approval.status === "pending" ? (
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -1082,7 +1567,16 @@ export default function BoardDetailPage() {
               Review pending decisions from your lead agent.
             </DialogDescription>
           </DialogHeader>
-          {boardId ? <BoardApprovalsPanel boardId={boardId} /> : null}
+          {boardId ? (
+            <BoardApprovalsPanel
+              boardId={boardId}
+              approvals={approvals}
+              isLoading={isApprovalsLoading}
+              error={approvalsError}
+              onDecision={handleApprovalDecision}
+              onRefresh={loadApprovals}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -1200,6 +1694,14 @@ export default function BoardDetailPage() {
           <DialogFooter className="flex flex-wrap gap-2">
             <Button
               variant="outline"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={!selectedTask || isSavingTask}
+              className="border-rose-200 text-rose-600 hover:border-rose-300 hover:text-rose-700"
+            >
+              Delete task
+            </Button>
+            <Button
+              variant="outline"
               onClick={handleTaskReset}
               disabled={!selectedTask || isSavingTask || !hasTaskChanges}
             >
@@ -1210,6 +1712,38 @@ export default function BoardDetailPage() {
               disabled={!selectedTask || isSavingTask || !hasTaskChanges}
             >
               {isSavingTask ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent aria-label="Delete task">
+          <DialogHeader>
+            <DialogTitle>Delete task</DialogTitle>
+            <DialogDescription>
+              This removes the task permanently. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteTaskError ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-600">
+              {deleteTaskError}
+            </div>
+          ) : null}
+          <DialogFooter className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeletingTask}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteTask}
+              disabled={isDeletingTask}
+              className="bg-rose-600 text-white hover:bg-rose-700"
+            >
+              {isDeletingTask ? "Deleting…" : "Delete task"}
             </Button>
           </DialogFooter>
         </DialogContent>

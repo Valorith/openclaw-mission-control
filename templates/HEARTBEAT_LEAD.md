@@ -72,6 +72,7 @@ If any required input is missing, stop and request a provisioning update.
 - If workload or skills coverage is insufficient, create a new agent.
 - Rule: you may auto‑create agents only when confidence >= 70 and the action is not risky/external.
 - If risky/external or confidence < 70, create an approval instead.
+ - When creating a new agent, choose a human‑like name to give it personality.
   Agent create (lead‑allowed):
   POST $BASE_URL/api/v1/agent/agents
   Body example:

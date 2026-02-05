@@ -332,7 +332,11 @@ async def agent_heartbeat(
     agent_ctx: AgentAuthContext = Depends(get_agent_auth_context),
 ) -> AgentRead:
     if agent_ctx.agent.name != payload.name:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        payload = AgentHeartbeatCreate(
+            name=agent_ctx.agent.name,
+            status=payload.status,
+            board_id=payload.board_id,
+        )
     return await agents_api.heartbeat_or_create_agent(  # type: ignore[attr-defined]
         payload=payload,
         session=session,

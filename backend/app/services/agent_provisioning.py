@@ -144,6 +144,9 @@ def _build_context(
         context_key: normalized_identity.get(field, DEFAULT_IDENTITY_PROFILE[field])
         for field, context_key in IDENTITY_PROFILE_FIELDS.items()
     }
+    preferred_name = (user.preferred_name or "") if user else ""
+    if preferred_name:
+        preferred_name = preferred_name.strip().split()[0]
     return {
         "agent_name": agent.name,
         "agent_id": agent_id,
@@ -162,7 +165,7 @@ def _build_context(
         "main_session_key": main_session_key,
         "workspace_root": workspace_root,
         "user_name": (user.name or "") if user else "",
-        "user_preferred_name": (user.preferred_name or "") if user else "",
+        "user_preferred_name": preferred_name,
         "user_pronouns": (user.pronouns or "") if user else "",
         "user_timezone": (user.timezone or "") if user else "",
         "user_notes": (user.notes or "") if user else "",
@@ -198,6 +201,9 @@ def _build_main_context(
         context_key: normalized_identity.get(field, DEFAULT_IDENTITY_PROFILE[field])
         for field, context_key in IDENTITY_PROFILE_FIELDS.items()
     }
+    preferred_name = (user.preferred_name or "") if user else ""
+    if preferred_name:
+        preferred_name = preferred_name.strip().split()[0]
     return {
         "agent_name": agent.name,
         "agent_id": str(agent.id),
@@ -207,7 +213,7 @@ def _build_main_context(
         "main_session_key": gateway.main_session_key or "",
         "workspace_root": gateway.workspace_root or "",
         "user_name": (user.name or "") if user else "",
-        "user_preferred_name": (user.preferred_name or "") if user else "",
+        "user_preferred_name": preferred_name,
         "user_pronouns": (user.pronouns or "") if user else "",
         "user_timezone": (user.timezone or "") if user else "",
         "user_notes": (user.notes or "") if user else "",
@@ -449,7 +455,8 @@ async def provision_agent(
     await _patch_gateway_agent_list(agent_id, workspace_path, heartbeat, client_config)
 
     context = _build_context(agent, board, gateway, auth_token, user)
-    supported = await _supported_gateway_files(client_config)
+    supported = set(await _supported_gateway_files(client_config))
+    supported.add("USER.md")
     existing_files = await _gateway_agent_files_index(agent_id, client_config)
     include_bootstrap = True
     if action == "update" and not force_bootstrap:
@@ -500,7 +507,8 @@ async def provision_main_agent(
         raise OpenClawGatewayError("Unable to resolve gateway main agent id")
 
     context = _build_main_context(agent, gateway, auth_token, user)
-    supported = await _supported_gateway_files(client_config)
+    supported = set(await _supported_gateway_files(client_config))
+    supported.add("USER.md")
     existing_files = await _gateway_agent_files_index(agent_id, client_config)
     include_bootstrap = action != "update" or force_bootstrap
     if action == "update" and not force_bootstrap:

@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import run_in_threadpool
-from sqlalchemy import asc, desc
+from sqlalchemy import asc, desc, delete
 from sqlmodel import Session, col, select
 
 from app.api.deps import (
@@ -32,6 +32,7 @@ from app.models.agents import Agent
 from app.models.boards import Board
 from app.models.gateways import Gateway
 from app.models.tasks import Task
+from app.models.task_fingerprints import TaskFingerprint
 from app.schemas.tasks import TaskCommentCreate, TaskCommentRead, TaskCreate, TaskRead, TaskUpdate
 from app.services.activity_log import record_activity
 
@@ -148,6 +149,73 @@ async def _send_lead_task_message(
 ) -> None:
     await ensure_session(session_key, config=config, label="Lead Agent")
     await send_message(message, session_key=session_key, config=config, deliver=False)
+
+
+async def _send_agent_task_message(
+    *,
+    session_key: str,
+    config: GatewayClientConfig,
+    agent_name: str,
+    message: str,
+) -> None:
+    await ensure_session(session_key, config=config, label=agent_name)
+    await send_message(message, session_key=session_key, config=config, deliver=False)
+
+
+def _notify_agent_on_task_assign(
+    *,
+    session: Session,
+    board: Board,
+    task: Task,
+    agent: Agent,
+) -> None:
+    if not agent.openclaw_session_id:
+        return
+    config = _gateway_config(session, board)
+    if config is None:
+        return
+    description = (task.description or "").strip()
+    if len(description) > 500:
+        description = f"{description[:497]}..."
+    details = [
+        f"Board: {board.name}",
+        f"Task: {task.title}",
+        f"Task ID: {task.id}",
+        f"Status: {task.status}",
+    ]
+    if description:
+        details.append(f"Description: {description}")
+    message = (
+        "TASK ASSIGNED\n"
+        + "\n".join(details)
+        + "\n\nTake action: open the task and begin work. Post updates as task comments."
+    )
+    try:
+        asyncio.run(
+            _send_agent_task_message(
+                session_key=agent.openclaw_session_id,
+                config=config,
+                agent_name=agent.name,
+                message=message,
+            )
+        )
+        record_activity(
+            session,
+            event_type="task.assignee_notified",
+            message=f"Agent notified for assignment: {agent.name}.",
+            agent_id=agent.id,
+            task_id=task.id,
+        )
+        session.commit()
+    except OpenClawGatewayError as exc:
+        record_activity(
+            session,
+            event_type="task.assignee_notify_failed",
+            message=f"Assignee notify failed: {exc}",
+            agent_id=agent.id,
+            task_id=task.id,
+        )
+        session.commit()
 
 
 def _notify_lead_on_task_create(
@@ -300,6 +368,15 @@ def create_task(
     )
     session.commit()
     _notify_lead_on_task_create(session=session, board=board, task=task)
+    if task.assigned_agent_id:
+        assigned_agent = session.get(Agent, task.assigned_agent_id)
+        if assigned_agent:
+            _notify_agent_on_task_assign(
+                session=session,
+                board=board,
+                task=task,
+                agent=assigned_agent,
+            )
     return task
 
 
@@ -311,6 +388,7 @@ def update_task(
     actor: ActorContext = Depends(require_admin_or_agent),
 ) -> Task:
     previous_status = task.status
+    previous_assigned = task.assigned_agent_id
     updates = payload.model_dump(exclude_unset=True)
     comment = updates.pop("comment", None)
     if comment is not None and not comment.strip():
@@ -431,6 +509,23 @@ def update_task(
         agent_id=actor.agent.id if actor.actor_type == "agent" and actor.agent else None,
     )
     session.commit()
+    if task.assigned_agent_id and task.assigned_agent_id != previous_assigned:
+        if (
+            actor.actor_type == "agent"
+            and actor.agent
+            and task.assigned_agent_id == actor.agent.id
+        ):
+            return task
+        assigned_agent = session.get(Agent, task.assigned_agent_id)
+        if assigned_agent:
+            board = session.get(Board, task.board_id) if task.board_id else None
+            if board:
+                _notify_agent_on_task_assign(
+                    session=session,
+                    board=board,
+                    task=task,
+                    agent=assigned_agent,
+                )
     return task
 
 
@@ -440,6 +535,8 @@ def delete_task(
     task: Task = Depends(get_task_or_404),
     auth: AuthContext = Depends(require_admin_auth),
 ) -> dict[str, bool]:
+    session.execute(delete(ActivityEvent).where(col(ActivityEvent.task_id) == task.id))
+    session.execute(delete(TaskFingerprint).where(col(TaskFingerprint.task_id) == task.id))
     session.delete(task)
     session.commit()
     return {"ok": True}
