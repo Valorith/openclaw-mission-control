@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -9,10 +10,14 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.agent_tokens import verify_agent_token
+from app.core.time import utcnow
 from app.db.session import get_session
 from app.models.agents import Agent
 
 logger = logging.getLogger(__name__)
+
+_LAST_SEEN_TOUCH_INTERVAL = timedelta(seconds=30)
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 @dataclass
@@ -49,6 +54,34 @@ def _resolve_agent_token(
     return None
 
 
+async def _touch_agent_presence(
+    request: Request,
+    session: AsyncSession,
+    agent: Agent,
+) -> None:
+    """Best-effort update of last_seen/status for any authenticated agent request.
+
+    Heartbeats are the primary presence mechanism, but agents may still make API
+    calls (task comments, memory updates, etc). Touch presence so the UI reflects
+    real activity even if the heartbeat loop isn't running.
+    """
+
+    now = utcnow()
+    if agent.last_seen_at is not None and now - agent.last_seen_at < _LAST_SEEN_TOUCH_INTERVAL:
+        return
+
+    agent.last_seen_at = now
+    agent.updated_at = now
+    if agent.status not in {"updating", "deleting"}:
+        agent.status = "online"
+    session.add(agent)
+
+    # For safe HTTP methods, endpoints typically do not commit. Persist the touch
+    # so agents that only poll/read still show as online.
+    if request.method.upper() in _SAFE_METHODS:
+        await session.commit()
+
+
 async def get_agent_auth_context(
     request: Request,
     agent_token: str | None = Header(default=None, alias="X-Agent-Token"),
@@ -72,6 +105,7 @@ async def get_agent_auth_context(
             resolved[:6],
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    await _touch_agent_presence(request, session, agent)
     return AgentAuthContext(actor_type="agent", agent=agent)
 
 
@@ -103,4 +137,5 @@ async def get_agent_auth_context_optional(
             resolved[:6],
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    await _touch_agent_presence(request, session, agent)
     return AgentAuthContext(actor_type="agent", agent=agent)
