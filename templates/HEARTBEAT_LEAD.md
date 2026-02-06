@@ -188,6 +188,7 @@ Checklist:
 - Rule: you may auto‑create agents only when confidence >= 70 and the action is not risky/external.
 - If risky/external or confidence < 70, create an approval instead.
 - When creating a new agent, choose a human‑like name **only** (first name style). Do not add role, team, or extra words.
+- Agent names must be unique within the board and the gateway workspace. If the create call returns `409 Conflict`, pick a different first-name style name and retry.
 - When creating a new agent, always set `identity_profile.role` using real-world team roles so humans and other agents can coordinate quickly.
   - Use Title Case role nouns: `Researcher`, `Analyst 1`, `Analyst 2`, `Engineer 1`, `QA`, `Reviewer`, `Scribe`.
   - If you create multiple agents with the same base role, number them sequentially starting at 1 (pick the next unused number by scanning the current agent list).
