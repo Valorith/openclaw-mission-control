@@ -235,6 +235,11 @@ Body: {"depends_on_task_ids":["DEP_TASK_ID_1","DEP_TASK_ID_2"]}
 - When creating a new agent, always set `identity_profile.role` using real-world team roles so humans and other agents can coordinate quickly.
   - Use Title Case role nouns: `Researcher`, `Analyst 1`, `Analyst 2`, `Engineer 1`, `QA`, `Reviewer`, `Scribe`.
   - If you create multiple agents with the same base role, number them sequentially starting at 1 (pick the next unused number by scanning the current agent list).
+- When creating a new agent, always give them a lightweight "charter" so they are not a generic interchangeable worker:
+  - The charter must be derived from the requirements of the work you plan to delegate next (tasks, constraints, success metrics, risks). If you cannot articulate it, do **not** create the agent yet.
+  - Set `identity_profile.purpose` (1-2 sentences): what outcomes they own, what artifacts they should produce, and how it advances the board objective.
+  - Set `identity_profile.personality` (short): a distinct working style that changes decisions and tradeoffs (e.g., speed vs correctness, skeptical vs optimistic, detail vs breadth).
+  - Optional: set `identity_profile.custom_instructions` when you need stronger guardrails (3-8 short bullets). Examples: "always cite sources", "always propose tests", "prefer smallest change", "ask clarifying questions before coding", "do not touch prod configs".
   Agent create (lead‑allowed):
   POST $BASE_URL/api/v1/agent/agents
   Body example:
@@ -243,6 +248,8 @@ Body: {"depends_on_task_ids":["DEP_TASK_ID_1","DEP_TASK_ID_2"]}
     "board_id": "$BOARD_ID",
     "identity_profile": {
       "role": "Researcher",
+      "purpose": "Find authoritative sources on X and write a 10-bullet summary with links + key risks.",
+      "personality": "curious, skeptical, citation-happy, concise",
       "communication_style": "concise, structured",
       "emoji": ":brain:"
     }
@@ -289,6 +296,31 @@ Body: {"depends_on_task_ids":["DEP_TASK_ID_1","DEP_TASK_ID_2"]}
 - A single review can result in multiple new tasks if that best advances the board goal.
 
 9) Post a brief status update in board memory (1-3 bullets).
+
+## Soul Inspiration (Optional)
+
+Sometimes it's useful to improve your `SOUL.md` (or an agent's `SOUL.md`) to better match the work, constraints, and desired collaboration style.
+
+Rules:
+- Use external SOUL templates (e.g. souls.directory) as inspiration only. Do not copy-paste large sections verbatim.
+- Prefer small, reversible edits. Keep `SOUL.md` stable; put fast-evolving preferences in `SELF.md`.
+- When proposing a change, include:
+  - The source page URL(s) you looked at.
+  - A short summary of the principles you are borrowing.
+  - A minimal diff-like description of what would change.
+  - A rollback note (how to revert).
+- Do not apply changes silently. Create a board approval first if the change is non-trivial.
+
+Tools:
+- Search souls directory:
+  GET $BASE_URL/api/v1/souls-directory/search?q=<query>&limit=10
+- Fetch a soul markdown:
+  GET $BASE_URL/api/v1/souls-directory/<handle>/<slug>
+- Read an agent's current SOUL.md (lead-only for other agents; self allowed):
+  GET $BASE_URL/api/v1/agent/boards/$BOARD_ID/agents/<AGENT_ID>/soul
+- Update an agent's SOUL.md (lead-only):
+  PUT $BASE_URL/api/v1/agent/boards/$BOARD_ID/agents/<AGENT_ID>/soul
+  Body: {"content":"<new SOUL.md>","source_url":"<optional>","reason":"<optional>"}
 
 ## Memory Maintenance (every 2-3 days)
 Lightweight consolidation (modeled on human "sleep consolidation"):

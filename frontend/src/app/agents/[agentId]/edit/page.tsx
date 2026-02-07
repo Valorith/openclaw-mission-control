@@ -68,16 +68,27 @@ const getBoardOptions = (boards: BoardRead[]): SearchableSelectOption[] =>
     label: board.name,
   }));
 
-const normalizeIdentityProfile = (
-  profile: IdentityProfile,
-): IdentityProfile | null => {
-  const normalized: IdentityProfile = {
-    role: profile.role.trim(),
-    communication_style: profile.communication_style.trim(),
-    emoji: profile.emoji.trim(),
+const mergeIdentityProfile = (
+  existing: unknown,
+  patch: IdentityProfile,
+): Record<string, unknown> | null => {
+  const resolved: Record<string, unknown> =
+    existing && typeof existing === "object"
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+  const updates: Record<string, string> = {
+    role: patch.role.trim(),
+    communication_style: patch.communication_style.trim(),
+    emoji: patch.emoji.trim(),
   };
-  const hasValue = Object.values(normalized).some((value) => value.length > 0);
-  return hasValue ? normalized : null;
+  for (const [key, value] of Object.entries(updates)) {
+    if (value) {
+      resolved[key] = value;
+    } else {
+      delete resolved[key];
+    }
+  }
+  return Object.keys(resolved).length > 0 ? resolved : null;
 };
 
 const withIdentityDefaults = (
@@ -241,7 +252,8 @@ export default function EditAgentPage() {
         every: resolvedHeartbeatEvery.trim() || "10m",
         target: resolvedHeartbeatTarget,
       } as unknown as Record<string, unknown>,
-      identity_profile: normalizeIdentityProfile(
+      identity_profile: mergeIdentityProfile(
+        loadedAgent.identity_profile,
         resolvedIdentityProfile,
       ) as unknown as Record<string, unknown> | null,
       soul_template: resolvedSoulTemplate.trim() || null,

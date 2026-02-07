@@ -15,6 +15,12 @@ every message.
 - Role: {{ identity_role }}
 - Communication: {{ identity_communication_style }}
 - Emoji: {{ identity_emoji }}
+{% if identity_purpose %}
+- Purpose: {{ identity_purpose }}
+{% endif %}
+{% if identity_personality %}
+- Personality: {{ identity_personality }}
+{% endif %}
 
 {% if board_id is defined %}
 - Board: {{ board_name }}

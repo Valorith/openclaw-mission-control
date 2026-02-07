@@ -4,7 +4,9 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { isLikelyValidClerkPublishableKey } from "@/auth/clerkKey";
 
 const isClerkEnabled = () =>
-  isLikelyValidClerkPublishableKey(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  isLikelyValidClerkPublishableKey(
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  );
 
 export default isClerkEnabled() ? clerkMiddleware() : () => NextResponse.next();
 

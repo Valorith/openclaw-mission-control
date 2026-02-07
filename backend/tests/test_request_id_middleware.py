@@ -46,7 +46,9 @@ async def test_request_id_middleware_ignores_blank_client_header_and_generates_o
 
     assert isinstance(captured_request_id, str) and captured_request_id
     # Header should reflect the generated id, not the blank one.
-    values = [v for k, v in response_headers if k.lower() == REQUEST_ID_HEADER.lower().encode("latin-1")]
+    values = [
+        v for k, v in response_headers if k.lower() == REQUEST_ID_HEADER.lower().encode("latin-1")
+    ]
     assert values == [captured_request_id.encode("latin-1")]
 
 
@@ -81,5 +83,7 @@ async def test_request_id_middleware_does_not_duplicate_existing_header() -> Non
     assert start_headers is not None
 
     # Ensure the middleware did not append a second copy.
-    values = [v for k, v in start_headers if k.lower() == REQUEST_ID_HEADER.lower().encode("latin-1")]
+    values = [
+        v for k, v in start_headers if k.lower() == REQUEST_ID_HEADER.lower().encode("latin-1")
+    ]
     assert values == [b"already"]

@@ -4,7 +4,7 @@ This package is the **Next.js** web UI for OpenClaw Mission Control.
 
 - Talks to the Mission Control **backend** over HTTP (typically `http://localhost:8000`).
 - Uses **React Query** for data fetching.
-- Can optionally enable **Clerk** authentication (disabled by default unless you provide a *real* Clerk publishable key).
+- Can optionally enable **Clerk** authentication (disabled by default unless you provide a _real_ Clerk publishable key).
 
 ## Prerequisites
 
@@ -73,7 +73,7 @@ Implementation detail: we gate on a conservative regex (`pk_test_...` / `pk_live
   - `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL`
 
 **Important:** `frontend/.env.example` contains placeholder values like `YOUR_PUBLISHABLE_KEY`.
-Those placeholders are *not* valid keys and are intentionally treated as “Clerk disabled”.
+Those placeholders are _not_ valid keys and are intentionally treated as “Clerk disabled”.
 
 ## How the frontend talks to the backend
 
@@ -160,3 +160,8 @@ Clerk should be **off** unless you set a real `pk_test_...` or `pk_live_...` pub
 `next.config.ts` sets `allowedDevOrigins` for dev proxy safety.
 
 If you see repeated proxy errors (often `ECONNRESET`), make sure your dev server hostname and browser URL match (e.g. `localhost` vs `127.0.0.1`), and that your origin is included in `allowedDevOrigins`.
+
+Notes:
+- Local dev should work via `http://localhost:3000` and `http://127.0.0.1:3000`.
+- LAN dev should work via the configured LAN IP (e.g. `http://192.168.1.101:3000`) **only** if you bind the dev server to all interfaces (`npm run dev:lan`).
+- If you bind Next to `127.0.0.1` only, remote LAN clients won’t connect.

@@ -21,7 +21,11 @@ import {
   useDeleteBoardApiV1BoardsBoardIdDelete,
   useListBoardsApiV1BoardsGet,
 } from "@/api/generated/boards/boards";
-import type { BoardRead } from "@/api/generated/model";
+import {
+  type listBoardGroupsApiV1BoardGroupsGetResponse,
+  useListBoardGroupsApiV1BoardGroupsGet,
+} from "@/api/generated/board-groups/board-groups";
+import type { BoardGroupRead, BoardRead } from "@/api/generated/model";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
 import { DashboardShell } from "@/components/templates/DashboardShell";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -46,6 +50,9 @@ const formatTimestamp = (value?: string | null) => {
   });
 };
 
+const compactId = (value: string) =>
+  value.length > 8 ? `${value.slice(0, 8)}…` : value;
+
 export default function BoardsPage() {
   const { isSignedIn } = useAuth();
   const queryClient = useQueryClient();
@@ -63,6 +70,20 @@ export default function BoardsPage() {
     },
   });
 
+  const groupsQuery = useListBoardGroupsApiV1BoardGroupsGet<
+    listBoardGroupsApiV1BoardGroupsGetResponse,
+    ApiError
+  >(
+    { limit: 200 },
+    {
+      query: {
+        enabled: Boolean(isSignedIn),
+        refetchInterval: 30_000,
+        refetchOnMount: "always",
+      },
+    },
+  );
+
   const boards = useMemo(
     () =>
       boardsQuery.data?.status === 200
@@ -70,6 +91,19 @@ export default function BoardsPage() {
         : [],
     [boardsQuery.data],
   );
+
+  const groups = useMemo<BoardGroupRead[]>(() => {
+    if (groupsQuery.data?.status !== 200) return [];
+    return groupsQuery.data.data.items ?? [];
+  }, [groupsQuery.data]);
+
+  const groupById = useMemo(() => {
+    const map = new Map<string, BoardGroupRead>();
+    for (const group of groups) {
+      map.set(group.id, group);
+    }
+    return map;
+  }, [groups]);
 
   const deleteMutation = useDeleteBoardApiV1BoardsBoardIdDelete<
     ApiError,
@@ -137,6 +171,28 @@ export default function BoardsPage() {
         ),
       },
       {
+        id: "group",
+        header: "Group",
+        cell: ({ row }) => {
+          const groupId = row.original.board_group_id;
+          if (!groupId) {
+            return <span className="text-sm text-slate-400">—</span>;
+          }
+          const group = groupById.get(groupId);
+          const label = group?.name ?? compactId(groupId);
+          const title = group?.name ?? groupId;
+          return (
+            <Link
+              href={`/board-groups/${groupId}`}
+              className="text-sm font-medium text-slate-700 hover:text-blue-600"
+              title={title}
+            >
+              {label}
+            </Link>
+          );
+        },
+      },
+      {
         accessorKey: "updated_at",
         header: "Updated",
         cell: ({ row }) => (
@@ -167,7 +223,7 @@ export default function BoardsPage() {
         ),
       },
     ],
-    [],
+    [groupById],
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library

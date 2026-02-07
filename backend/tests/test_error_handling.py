@@ -3,10 +3,14 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
-
 from starlette.requests import Request
 
-from app.core.error_handling import REQUEST_ID_HEADER, _error_payload, _get_request_id, install_error_handling
+from app.core.error_handling import (
+    REQUEST_ID_HEADER,
+    _error_payload,
+    _get_request_id,
+    install_error_handling,
+)
 
 
 def test_request_validation_error_includes_request_id():

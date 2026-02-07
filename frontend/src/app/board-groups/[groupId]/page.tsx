@@ -135,7 +135,11 @@ const SSE_RECONNECT_BACKOFF = {
 
 type HeartbeatUnit = "s" | "m" | "h" | "d";
 
-const HEARTBEAT_PRESETS: Array<{ label: string; amount: number; unit: HeartbeatUnit }> = [
+const HEARTBEAT_PRESETS: Array<{
+  label: string;
+  amount: number;
+  unit: HeartbeatUnit;
+}> = [
   { label: "30s", amount: 30, unit: "s" },
   { label: "1m", amount: 1, unit: "m" },
   { label: "2m", amount: 2, unit: "m" },
@@ -781,22 +785,22 @@ export default function BoardGroupDetailPage() {
                     {HEARTBEAT_PRESETS.map((preset) => {
                       const value = `${preset.amount}${preset.unit}`;
                       return (
-                      <button
-                        key={value}
-                        type="button"
-                        className={cn(
-                          "rounded-md px-2.5 py-1 text-xs font-semibold transition-colors",
-                          heartbeatEvery === value
-                            ? "bg-slate-900 text-white"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                        )}
-                        onClick={() => {
-                          setHeartbeatAmount(String(preset.amount));
-                          setHeartbeatUnit(preset.unit);
-                        }}
-                      >
-                        {preset.label}
-                      </button>
+                        <button
+                          key={value}
+                          type="button"
+                          className={cn(
+                            "rounded-md px-2.5 py-1 text-xs font-semibold transition-colors",
+                            heartbeatEvery === value
+                              ? "bg-slate-900 text-white"
+                              : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                          )}
+                          onClick={() => {
+                            setHeartbeatAmount(String(preset.amount));
+                            setHeartbeatUnit(preset.unit);
+                          }}
+                        >
+                          {preset.label}
+                        </button>
                       );
                     })}
                   </div>

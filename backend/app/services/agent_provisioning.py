@@ -34,6 +34,9 @@ EXTRA_IDENTITY_PROFILE_FIELDS = {
     "verbosity": "identity_verbosity",
     "output_format": "identity_output_format",
     "update_cadence": "identity_update_cadence",
+    # Per-agent charter (optional). Used to give agents a "purpose in life" and a distinct vibe.
+    "purpose": "identity_purpose",
+    "personality": "identity_personality",
     "custom_instructions": "identity_custom_instructions",
 }
 

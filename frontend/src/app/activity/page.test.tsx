@@ -26,15 +26,23 @@ vi.mock("next/link", () => {
 // wrappers still render <SignedOut/> from @clerk/nextjs (which crashes in real builds).
 vi.mock("@clerk/nextjs", () => {
   return {
-    ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    ClerkProvider: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
     SignedIn: () => {
-      throw new Error("@clerk/nextjs SignedIn rendered (unexpected in secretless mode)");
+      throw new Error(
+        "@clerk/nextjs SignedIn rendered (unexpected in secretless mode)",
+      );
     },
     SignedOut: () => {
       throw new Error("@clerk/nextjs SignedOut rendered without ClerkProvider");
     },
-    SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    SignOutButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    SignInButton: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
+    SignOutButton: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
     useAuth: () => ({ isLoaded: true, isSignedIn: false }),
     useUser: () => ({ isLoaded: true, isSignedIn: false, user: null }),
   };
