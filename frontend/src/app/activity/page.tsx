@@ -302,7 +302,9 @@ export default function ActivityPage() {
               forceRedirectUrl="/activity"
               signUpForceRedirectUrl="/activity"
             >
-              <Button className="mt-4" data-testid="activity-signin">Sign in</Button>
+              <Button className="mt-4" data-testid="activity-signin">
+                Sign in
+              </Button>
             </SignInButton>
           </div>
         </div>
