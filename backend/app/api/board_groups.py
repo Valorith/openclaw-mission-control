@@ -56,7 +56,7 @@ async def _require_group_access(
     member: OrganizationMember,
     write: bool,
 ) -> BoardGroup:
-    group = await session.get(BoardGroup, group_id)
+    group = await BoardGroup.objects.by_id(group_id).first(session)
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if group.organization_id != member.organization_id:
@@ -67,9 +67,9 @@ async def _require_group_access(
     if not write and member_all_boards_read(member):
         return group
 
-    board_ids = list(
-        await session.exec(select(Board.id).where(col(Board.board_group_id) == group_id))
-    )
+    board_ids = [
+        board.id for board in await Board.objects.filter_by(board_group_id=group_id).all(session)
+    ]
     if not board_ids:
         if is_org_admin(member):
             return group
@@ -153,7 +153,7 @@ async def apply_board_group_heartbeat(
     session: AsyncSession = Depends(get_session),
     actor: ActorContext = Depends(require_admin_or_agent),
 ) -> BoardGroupHeartbeatApplyResult:
-    group = await session.get(BoardGroup, group_id)
+    group = await BoardGroup.objects.by_id(group_id).first(session)
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
@@ -181,11 +181,11 @@ async def apply_board_group_heartbeat(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
         if not agent.is_board_lead:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-        board = await session.get(Board, agent.board_id)
+        board = await Board.objects.by_id(agent.board_id).first(session)
         if board is None or board.board_group_id != group_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
-    boards = list(await session.exec(select(Board).where(col(Board.board_group_id) == group_id)))
+    boards = await Board.objects.filter_by(board_group_id=group_id).all(session)
     board_by_id = {board.id: board for board in boards}
     board_ids = list(board_by_id.keys())
     if not board_ids:
@@ -196,7 +196,7 @@ async def apply_board_group_heartbeat(
             failed_agent_ids=[],
         )
 
-    agents = list(await session.exec(select(Agent).where(col(Agent.board_id).in_(board_ids))))
+    agents = await Agent.objects.by_field_in("board_id", board_ids).all(session)
     if not payload.include_board_leads:
         agents = [agent for agent in agents if not agent.is_board_lead]
 
@@ -232,7 +232,7 @@ async def apply_board_group_heartbeat(
 
     failed_agent_ids: list[UUID] = []
     gateway_ids = list(agents_by_gateway_id.keys())
-    gateways = list(await session.exec(select(Gateway).where(col(Gateway.id).in_(gateway_ids))))
+    gateways = await Gateway.objects.by_ids(gateway_ids).all(session)
     gateway_by_id = {gateway.id: gateway for gateway in gateways}
     for gateway_id, gateway_agents in agents_by_gateway_id.items():
         gateway = gateway_by_id.get(gateway_id)

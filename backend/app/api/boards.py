@@ -163,7 +163,7 @@ async def _board_gateway(
 ) -> tuple[Gateway | None, GatewayClientConfig | None]:
     if not board.gateway_id:
         return None, None
-    config = await session.get(Gateway, board.gateway_id)
+    config = await Gateway.objects.by_id(board.gateway_id).first(session)
     if config is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -292,7 +292,7 @@ async def delete_board(
     session: AsyncSession = Depends(get_session),
     board: Board = Depends(get_board_for_user_write),
 ) -> OkResponse:
-    agents = list(await session.exec(select(Agent).where(Agent.board_id == board.id)))
+    agents = await Agent.objects.filter_by(board_id=board.id).all(session)
     task_ids = list(await session.exec(select(Task.id).where(Task.board_id == board.id)))
 
     config, client_config = await _board_gateway(session, board)

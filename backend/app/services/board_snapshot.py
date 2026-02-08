@@ -97,9 +97,9 @@ async def build_board_snapshot(session: AsyncSession, board: Board) -> BoardSnap
     board_read = BoardRead.model_validate(board, from_attributes=True)
 
     tasks = list(
-        await session.exec(
-            select(Task).where(col(Task.board_id) == board.id).order_by(col(Task.created_at).desc())
-        )
+        await Task.objects.filter_by(board_id=board.id)
+        .order_by(col(Task.created_at).desc())
+        .all(session)
     )
     task_ids = [task.id for task in tasks]
 
@@ -114,12 +114,10 @@ async def build_board_snapshot(session: AsyncSession, board: Board) -> BoardSnap
     )
 
     main_session_keys = await _gateway_main_session_keys(session)
-    agents = list(
-        await session.exec(
-            select(Agent)
-            .where(col(Agent.board_id) == board.id)
-            .order_by(col(Agent.created_at).desc())
-        )
+    agents = (
+        await Agent.objects.filter_by(board_id=board.id)
+        .order_by(col(Agent.created_at).desc())
+        .all(session)
     )
     agent_reads = [_agent_to_read(agent, main_session_keys) for agent in agents]
     agent_name_by_id = {agent.id: agent.name for agent in agents}
@@ -134,13 +132,11 @@ async def build_board_snapshot(session: AsyncSession, board: Board) -> BoardSnap
         ).one()
     )
 
-    approvals = list(
-        await session.exec(
-            select(Approval)
-            .where(col(Approval.board_id) == board.id)
-            .order_by(col(Approval.created_at).desc())
-            .limit(200)
-        )
+    approvals = (
+        await Approval.objects.filter_by(board_id=board.id)
+        .order_by(col(Approval.created_at).desc())
+        .limit(200)
+        .all(session)
     )
     approval_reads = [_approval_to_read(approval) for approval in approvals]
 
@@ -173,17 +169,15 @@ async def build_board_snapshot(session: AsyncSession, board: Board) -> BoardSnap
         for task in tasks
     ]
 
-    chat_messages = list(
-        await session.exec(
-            select(BoardMemory)
-            .where(col(BoardMemory.board_id) == board.id)
-            .where(col(BoardMemory.is_chat).is_(True))
-            # Old/invalid rows (empty/whitespace-only content) can exist; exclude them to
-            # satisfy the NonEmptyStr response schema.
-            .where(func.length(func.trim(col(BoardMemory.content))) > 0)
-            .order_by(col(BoardMemory.created_at).desc())
-            .limit(200)
-        )
+    chat_messages = (
+        await BoardMemory.objects.filter_by(board_id=board.id)
+        .filter(col(BoardMemory.is_chat).is_(True))
+        # Old/invalid rows (empty/whitespace-only content) can exist; exclude them to
+        # satisfy the NonEmptyStr response schema.
+        .filter(func.length(func.trim(col(BoardMemory.content))) > 0)
+        .order_by(col(BoardMemory.created_at).desc())
+        .limit(200)
+        .all(session)
     )
     chat_messages.sort(key=lambda item: item.created_at)
     chat_reads = [_memory_to_read(memory) for memory in chat_messages]

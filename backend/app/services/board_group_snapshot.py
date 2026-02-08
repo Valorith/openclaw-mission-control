@@ -42,7 +42,7 @@ async def build_group_snapshot(
     include_done: bool = False,
     per_board_task_limit: int = 5,
 ) -> BoardGroupSnapshot:
-    statement = select(Board).where(col(Board.board_group_id) == group.id)
+    statement = Board.objects.filter_by(board_group_id=group.id).statement
     if exclude_board_id is not None:
         statement = statement.where(col(Board.id) != exclude_board_id)
     boards = list(await session.exec(statement.order_by(func.lower(col(Board.name)).asc())))
@@ -146,7 +146,7 @@ async def build_board_group_snapshot(
 ) -> BoardGroupSnapshot:
     if not board.board_group_id:
         return BoardGroupSnapshot(group=None, boards=[])
-    group = await session.get(BoardGroup, board.board_group_id)
+    group = await BoardGroup.objects.by_id(board.board_group_id).first(session)
     if group is None:
         return BoardGroupSnapshot(group=None, boards=[])
     return await build_group_snapshot(

@@ -243,7 +243,7 @@ def _serialize_comment(event: ActivityEvent) -> dict[str, object]:
 async def _gateway_config(session: AsyncSession, board: Board) -> GatewayClientConfig | None:
     if not board.gateway_id:
         return None
-    gateway = await session.get(Gateway, board.gateway_id)
+    gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
     if gateway is None or not gateway.url:
         return None
     return GatewayClientConfig(url=gateway.url, token=gateway.token)
@@ -331,12 +331,10 @@ async def _notify_lead_on_task_create(
     task: Task,
 ) -> None:
     lead = (
-        await session.exec(
-            select(Agent)
-            .where(Agent.board_id == board.id)
-            .where(col(Agent.is_board_lead).is_(True))
-        )
-    ).first()
+        await Agent.objects.filter_by(board_id=board.id)
+        .filter(col(Agent.is_board_lead).is_(True))
+        .first(session)
+    )
     if lead is None or not lead.openclaw_session_id:
         return
     config = await _gateway_config(session, board)
@@ -390,12 +388,10 @@ async def _notify_lead_on_task_unassigned(
     task: Task,
 ) -> None:
     lead = (
-        await session.exec(
-            select(Agent)
-            .where(Agent.board_id == board.id)
-            .where(col(Agent.is_board_lead).is_(True))
-        )
-    ).first()
+        await Agent.objects.filter_by(board_id=board.id)
+        .filter(col(Agent.is_board_lead).is_(True))
+        .first(session)
+    )
     if lead is None or not lead.openclaw_session_id:
         return
     config = await _gateway_config(session, board)
@@ -635,7 +631,7 @@ async def create_task(
     await session.commit()
     await _notify_lead_on_task_create(session=session, board=board, task=task)
     if task.assigned_agent_id:
-        assigned_agent = await session.get(Agent, task.assigned_agent_id)
+        assigned_agent = await Agent.objects.by_id(task.assigned_agent_id).first(session)
         if assigned_agent:
             await _notify_agent_on_task_assign(
                 session=session,
@@ -670,7 +666,7 @@ async def update_task(
         )
     board_id = task.board_id
     if actor.actor_type == "user" and actor.user is not None:
-        board = await session.get(Board, board_id)
+        board = await Board.objects.by_id(board_id).first(session)
         if board is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         await require_board_access(session, user=actor.user, board=board, write=True)
@@ -740,7 +736,7 @@ async def update_task(
             if "assigned_agent_id" in updates:
                 assigned_id = updates["assigned_agent_id"]
                 if assigned_id:
-                    agent = await session.get(Agent, assigned_id)
+                    agent = await Agent.objects.by_id(assigned_id).first(session)
                     if agent is None:
                         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
                     if agent.is_board_lead:
@@ -796,9 +792,13 @@ async def update_task(
         await session.refresh(task)
 
         if task.assigned_agent_id and task.assigned_agent_id != previous_assigned:
-            assigned_agent = await session.get(Agent, task.assigned_agent_id)
+            assigned_agent = await Agent.objects.by_id(task.assigned_agent_id).first(session)
             if assigned_agent:
-                board = await session.get(Board, task.board_id) if task.board_id else None
+                board = (
+                    await Board.objects.by_id(task.board_id).first(session)
+                    if task.board_id
+                    else None
+                )
                 if board:
                     await _notify_agent_on_task_assign(
                         session=session,
@@ -879,7 +879,7 @@ async def update_task(
                 task.in_progress_at = utcnow()
 
         if "assigned_agent_id" in updates and updates["assigned_agent_id"]:
-            agent = await session.get(Agent, updates["assigned_agent_id"])
+            agent = await Agent.objects.by_id(updates["assigned_agent_id"]).first(session)
             if agent is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
             if agent.board_id and task.board_id and agent.board_id != task.board_id:
@@ -941,7 +941,9 @@ async def update_task(
 
     if task.status == "inbox" and task.assigned_agent_id is None:
         if previous_status != "inbox" or previous_assigned is not None:
-            board = await session.get(Board, task.board_id) if task.board_id else None
+            board = (
+                await Board.objects.by_id(task.board_id).first(session) if task.board_id else None
+            )
             if board:
                 await _notify_lead_on_task_unassigned(
                     session=session,
@@ -953,9 +955,13 @@ async def update_task(
             # Don't notify the actor about their own assignment.
             pass
         else:
-            assigned_agent = await session.get(Agent, task.assigned_agent_id)
+            assigned_agent = await Agent.objects.by_id(task.assigned_agent_id).first(session)
             if assigned_agent:
-                board = await session.get(Board, task.board_id) if task.board_id else None
+                board = (
+                    await Board.objects.by_id(task.board_id).first(session)
+                    if task.board_id
+                    else None
+                )
                 if board:
                     await _notify_agent_on_task_assign(
                         session=session,
@@ -985,7 +991,7 @@ async def delete_task(
 ) -> OkResponse:
     if task.board_id is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
-    board = await session.get(Board, task.board_id)
+    board = await Board.objects.by_id(task.board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if auth.user is None:
@@ -1032,7 +1038,7 @@ async def create_task_comment(
     if task.board_id is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
     if actor.actor_type == "user" and actor.user is not None:
-        board = await session.get(Board, task.board_id)
+        board = await Board.objects.by_id(task.board_id).first(session)
         if board is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         await require_board_access(session, user=actor.user, board=board, write=True)
@@ -1059,18 +1065,17 @@ async def create_task_comment(
     mention_names = extract_mentions(payload.message)
     targets: dict[UUID, Agent] = {}
     if mention_names and task.board_id:
-        statement = select(Agent).where(col(Agent.board_id) == task.board_id)
-        for agent in await session.exec(statement):
+        for agent in await Agent.objects.filter_by(board_id=task.board_id).all(session):
             if matches_agent_mention(agent, mention_names):
                 targets[agent.id] = agent
     if not mention_names and task.assigned_agent_id:
-        assigned_agent = await session.get(Agent, task.assigned_agent_id)
+        assigned_agent = await Agent.objects.by_id(task.assigned_agent_id).first(session)
         if assigned_agent:
             targets[assigned_agent.id] = assigned_agent
     if actor.actor_type == "agent" and actor.agent:
         targets.pop(actor.agent.id, None)
     if targets:
-        board = await session.get(Board, task.board_id) if task.board_id else None
+        board = await Board.objects.by_id(task.board_id).first(session) if task.board_id else None
         config = await _gateway_config(session, board) if board else None
         if board and config:
             snippet = payload.message.strip()

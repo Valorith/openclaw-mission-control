@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import ValidationError
-from sqlmodel import col, select
+from sqlmodel import col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.deps import (
@@ -50,7 +50,7 @@ async def _gateway_config(
 ) -> tuple[Gateway, GatewayClientConfig]:
     if not board.gateway_id:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
-    gateway = await session.get(Gateway, board.gateway_id)
+    gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
     if gateway is None or not gateway.url or not gateway.main_session_key:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
     return gateway, GatewayClientConfig(url=gateway.url, token=gateway.token)
@@ -80,12 +80,10 @@ async def _ensure_lead_agent(
     identity_profile: dict[str, str] | None = None,
 ) -> Agent:
     existing = (
-        await session.exec(
-            select(Agent)
-            .where(Agent.board_id == board.id)
-            .where(col(Agent.is_board_lead).is_(True))
-        )
-    ).first()
+        await Agent.objects.filter_by(board_id=board.id)
+        .filter(col(Agent.is_board_lead).is_(True))
+        .first(session)
+    )
     if existing:
         desired_name = agent_name or _lead_agent_name(board)
         if existing.name != desired_name:
@@ -147,12 +145,10 @@ async def get_onboarding(
     session: AsyncSession = Depends(get_session),
 ) -> BoardOnboardingSession:
     onboarding = (
-        await session.exec(
-            select(BoardOnboardingSession)
-            .where(BoardOnboardingSession.board_id == board.id)
-            .order_by(col(BoardOnboardingSession.created_at).desc())
-        )
-    ).first()
+        await BoardOnboardingSession.objects.filter_by(board_id=board.id)
+        .order_by(col(BoardOnboardingSession.updated_at).desc())
+        .first(session)
+    )
     if onboarding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return onboarding
@@ -165,12 +161,10 @@ async def start_onboarding(
     session: AsyncSession = Depends(get_session),
 ) -> BoardOnboardingSession:
     onboarding = (
-        await session.exec(
-            select(BoardOnboardingSession)
-            .where(BoardOnboardingSession.board_id == board.id)
-            .where(BoardOnboardingSession.status == "active")
-        )
-    ).first()
+        await BoardOnboardingSession.objects.filter_by(board_id=board.id)
+        .filter(col(BoardOnboardingSession.status) == "active")
+        .first(session)
+    )
     if onboarding:
         return onboarding
 
@@ -248,12 +242,10 @@ async def answer_onboarding(
     session: AsyncSession = Depends(get_session),
 ) -> BoardOnboardingSession:
     onboarding = (
-        await session.exec(
-            select(BoardOnboardingSession)
-            .where(BoardOnboardingSession.board_id == board.id)
-            .order_by(col(BoardOnboardingSession.created_at).desc())
-        )
-    ).first()
+        await BoardOnboardingSession.objects.filter_by(board_id=board.id)
+        .order_by(col(BoardOnboardingSession.updated_at).desc())
+        .first(session)
+    )
     if onboarding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
@@ -295,18 +287,16 @@ async def agent_onboarding_update(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
     if board.gateway_id:
-        gateway = await session.get(Gateway, board.gateway_id)
+        gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
         if gateway and gateway.main_session_key and agent.openclaw_session_id:
             if agent.openclaw_session_id != gateway.main_session_key:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
     onboarding = (
-        await session.exec(
-            select(BoardOnboardingSession)
-            .where(BoardOnboardingSession.board_id == board.id)
-            .order_by(col(BoardOnboardingSession.created_at).desc())
-        )
-    ).first()
+        await BoardOnboardingSession.objects.filter_by(board_id=board.id)
+        .order_by(col(BoardOnboardingSession.updated_at).desc())
+        .first(session)
+    )
     if onboarding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if onboarding.status == "confirmed":
@@ -351,12 +341,10 @@ async def confirm_onboarding(
     auth: AuthContext = Depends(require_admin_auth),
 ) -> Board:
     onboarding = (
-        await session.exec(
-            select(BoardOnboardingSession)
-            .where(BoardOnboardingSession.board_id == board.id)
-            .order_by(col(BoardOnboardingSession.created_at).desc())
-        )
-    ).first()
+        await BoardOnboardingSession.objects.filter_by(board_id=board.id)
+        .order_by(col(BoardOnboardingSession.updated_at).desc())
+        .first(session)
+    )
     if onboarding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 

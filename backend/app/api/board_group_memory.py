@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func
-from sqlmodel import col, select
+from sqlmodel import col
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
@@ -71,7 +71,7 @@ def _serialize_memory(memory: BoardGroupMemory) -> dict[str, object]:
 async def _gateway_config(session: AsyncSession, board: Board) -> GatewayClientConfig | None:
     if board.gateway_id is None:
         return None
-    gateway = await session.get(Gateway, board.gateway_id)
+    gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
     if gateway is None or not gateway.url:
         return None
     return GatewayClientConfig(url=gateway.url, token=gateway.token)
@@ -96,17 +96,17 @@ async def _fetch_memory_events(
     is_chat: bool | None = None,
 ) -> list[BoardGroupMemory]:
     statement = (
-        select(BoardGroupMemory).where(col(BoardGroupMemory.board_group_id) == board_group_id)
+        BoardGroupMemory.objects.filter_by(board_group_id=board_group_id)
         # Old/invalid rows (empty/whitespace-only content) can exist; exclude them to
         # satisfy the NonEmptyStr response schema.
-        .where(func.length(func.trim(col(BoardGroupMemory.content))) > 0)
+        .filter(func.length(func.trim(col(BoardGroupMemory.content))) > 0)
     )
     if is_chat is not None:
-        statement = statement.where(col(BoardGroupMemory.is_chat) == is_chat)
-    statement = statement.where(col(BoardGroupMemory.created_at) >= since).order_by(
+        statement = statement.filter(col(BoardGroupMemory.is_chat) == is_chat)
+    statement = statement.filter(col(BoardGroupMemory.created_at) >= since).order_by(
         col(BoardGroupMemory.created_at)
     )
-    return list(await session.exec(statement))
+    return await statement.all(session)
 
 
 async def _require_group_access(
@@ -116,7 +116,7 @@ async def _require_group_access(
     ctx: OrganizationContext,
     write: bool,
 ) -> BoardGroup:
-    group = await session.get(BoardGroup, group_id)
+    group = await BoardGroup.objects.by_id(group_id).first(session)
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if group.organization_id != ctx.member.organization_id:
@@ -127,9 +127,9 @@ async def _require_group_access(
     if not write and member_all_boards_read(ctx.member):
         return group
 
-    board_ids = list(
-        await session.exec(select(Board.id).where(col(Board.board_group_id) == group_id))
-    )
+    board_ids = [
+        board.id for board in await Board.objects.filter_by(board_group_id=group_id).all(session)
+    ]
     if not board_ids:
         if is_org_admin(ctx.member):
             return group
@@ -156,12 +156,12 @@ async def _notify_group_memory_targets(
     is_broadcast = "broadcast" in tags or "all" in mentions
 
     # Fetch group boards + agents.
-    boards = list(await session.exec(select(Board).where(col(Board.board_group_id) == group.id)))
+    boards = await Board.objects.filter_by(board_group_id=group.id).all(session)
     if not boards:
         return
     board_by_id = {board.id: board for board in boards}
     board_ids = list(board_by_id.keys())
-    agents = list(await session.exec(select(Agent).where(col(Agent.board_id).in_(board_ids))))
+    agents = await Agent.objects.by_field_in("board_id", board_ids).all(session)
 
     targets: dict[str, Agent] = {}
     for agent in agents:
@@ -242,15 +242,15 @@ async def list_board_group_memory(
 ) -> DefaultLimitOffsetPage[BoardGroupMemoryRead]:
     await _require_group_access(session, group_id=group_id, ctx=ctx, write=False)
     statement = (
-        select(BoardGroupMemory).where(col(BoardGroupMemory.board_group_id) == group_id)
+        BoardGroupMemory.objects.filter_by(board_group_id=group_id)
         # Old/invalid rows (empty/whitespace-only content) can exist; exclude them to
         # satisfy the NonEmptyStr response schema.
-        .where(func.length(func.trim(col(BoardGroupMemory.content))) > 0)
+        .filter(func.length(func.trim(col(BoardGroupMemory.content))) > 0)
     )
     if is_chat is not None:
-        statement = statement.where(col(BoardGroupMemory.is_chat) == is_chat)
+        statement = statement.filter(col(BoardGroupMemory.is_chat) == is_chat)
     statement = statement.order_by(col(BoardGroupMemory.created_at).desc())
-    return await paginate(session, statement)
+    return await paginate(session, statement.statement)
 
 
 @group_router.get("/stream")
@@ -297,7 +297,7 @@ async def create_board_group_memory(
 ) -> BoardGroupMemory:
     group = await _require_group_access(session, group_id=group_id, ctx=ctx, write=True)
 
-    user = await session.get(User, ctx.member.user_id)
+    user = await User.objects.by_id(ctx.member.user_id).first(session)
     actor = ActorContext(actor_type="user", user=user)
     tags = set(payload.tags or [])
     is_chat = "chat" in tags
@@ -332,19 +332,18 @@ async def list_board_group_memory_for_board(
 ) -> DefaultLimitOffsetPage[BoardGroupMemoryRead]:
     group_id = board.board_group_id
     if group_id is None:
-        statement = select(BoardGroupMemory).where(col(BoardGroupMemory.id).is_(None))
-        return await paginate(session, statement)
+        return await paginate(session, BoardGroupMemory.objects.by_ids([]).statement)
 
-    statement = (
-        select(BoardGroupMemory).where(col(BoardGroupMemory.board_group_id) == group_id)
+    queryset = (
+        BoardGroupMemory.objects.filter_by(board_group_id=group_id)
         # Old/invalid rows (empty/whitespace-only content) can exist; exclude them to
         # satisfy the NonEmptyStr response schema.
-        .where(func.length(func.trim(col(BoardGroupMemory.content))) > 0)
+        .filter(func.length(func.trim(col(BoardGroupMemory.content))) > 0)
     )
     if is_chat is not None:
-        statement = statement.where(col(BoardGroupMemory.is_chat) == is_chat)
-    statement = statement.order_by(col(BoardGroupMemory.created_at).desc())
-    return await paginate(session, statement)
+        queryset = queryset.filter(col(BoardGroupMemory.is_chat) == is_chat)
+    queryset = queryset.order_by(col(BoardGroupMemory.created_at).desc())
+    return await paginate(session, queryset.statement)
 
 
 @board_router.get("/stream")
@@ -396,7 +395,7 @@ async def create_board_group_memory_for_board(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Board is not in a board group",
         )
-    group = await session.get(BoardGroup, group_id)
+    group = await BoardGroup.objects.by_id(group_id).first(session)
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 

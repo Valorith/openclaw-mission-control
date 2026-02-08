@@ -5,12 +5,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, Column, Text
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field
 
 from app.core.time import utcnow
+from app.models.base import QueryModel
 
 
-class Agent(SQLModel, table=True):
+class Agent(QueryModel, table=True):
     __tablename__ = "agents"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)

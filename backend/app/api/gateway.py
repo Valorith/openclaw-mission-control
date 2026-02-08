@@ -56,7 +56,7 @@ async def _resolve_gateway(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="board_id or gateway_url is required",
         )
-    board = await session.get(Board, board_id)
+    board = await Board.objects.by_id(board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Board not found")
     if isinstance(user, object) and user is not None:
@@ -66,7 +66,7 @@ async def _resolve_gateway(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Board gateway_id is required",
         )
-    gateway = await session.get(Gateway, board.gateway_id)
+    gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
     if gateway is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -216,7 +216,7 @@ async def get_gateway_session(
         sessions_list = list(sessions.get("sessions") or [])
     else:
         sessions_list = list(sessions or [])
-    if main_session and not any(session.get("key") == main_session for session in sessions_list):
+    if main_session and not any(item.get("key") == main_session for item in sessions_list):
         try:
             await ensure_session(main_session, config=config, label="Main Agent")
             refreshed = await openclaw_call("sessions.list", config=config)

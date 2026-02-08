@@ -59,7 +59,7 @@ async def require_org_member(
         member = await ensure_member_for_user(session, auth.user)
     if member is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    organization = await session.get(Organization, member.organization_id)
+    organization = await Organization.objects.by_id(member.organization_id).first(session)
     if organization is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     return OrganizationContext(organization=organization, member=member)
@@ -77,7 +77,7 @@ async def get_board_or_404(
     board_id: str,
     session: AsyncSession = Depends(get_session),
 ) -> Board:
-    board = await session.get(Board, board_id)
+    board = await Board.objects.by_id(board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return board
@@ -88,7 +88,7 @@ async def get_board_for_actor_read(
     session: AsyncSession = Depends(get_session),
     actor: ActorContext = Depends(require_admin_or_agent),
 ) -> Board:
-    board = await session.get(Board, board_id)
+    board = await Board.objects.by_id(board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if actor.actor_type == "agent":
@@ -106,7 +106,7 @@ async def get_board_for_actor_write(
     session: AsyncSession = Depends(get_session),
     actor: ActorContext = Depends(require_admin_or_agent),
 ) -> Board:
-    board = await session.get(Board, board_id)
+    board = await Board.objects.by_id(board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if actor.actor_type == "agent":
@@ -124,7 +124,7 @@ async def get_board_for_user_read(
     session: AsyncSession = Depends(get_session),
     auth: AuthContext = Depends(get_auth_context),
 ) -> Board:
-    board = await session.get(Board, board_id)
+    board = await Board.objects.by_id(board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if auth.user is None:
@@ -138,7 +138,7 @@ async def get_board_for_user_write(
     session: AsyncSession = Depends(get_session),
     auth: AuthContext = Depends(get_auth_context),
 ) -> Board:
-    board = await session.get(Board, board_id)
+    board = await Board.objects.by_id(board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if auth.user is None:
@@ -152,7 +152,7 @@ async def get_task_or_404(
     board: Board = Depends(get_board_for_actor_read),
     session: AsyncSession = Depends(get_session),
 ) -> Task:
-    task = await session.get(Task, task_id)
+    task = await Task.objects.by_id(task_id).first(session)
     if task is None or task.board_id != board.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return task

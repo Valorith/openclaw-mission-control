@@ -102,7 +102,7 @@ def _guard_board_access(agent_ctx: AgentAuthContext, board: Board) -> None:
 async def _gateway_config(session: AsyncSession, board: Board) -> GatewayClientConfig:
     if not board.gateway_id:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
-    gateway = await session.get(Gateway, board.gateway_id)
+    gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
     if gateway is None or not gateway.url:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
     return GatewayClientConfig(url=gateway.url, token=gateway.token)
@@ -117,9 +117,7 @@ async def _require_gateway_main(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Agent missing session key"
         )
-    gateway = (
-        await session.exec(select(Gateway).where(col(Gateway.main_session_key) == session_key))
-    ).first()
+    gateway = await Gateway.objects.filter_by(main_session_key=session_key).first(session)
     if gateway is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -139,7 +137,7 @@ async def _require_gateway_board(
     gateway: Gateway,
     board_id: UUID | str,
 ) -> Board:
-    board = await session.get(Board, board_id)
+    board = await Board.objects.by_id(board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Board not found")
     if board.gateway_id != gateway.id:
@@ -254,7 +252,7 @@ async def create_task(
             },
         )
     if task.assigned_agent_id:
-        agent = await session.get(Agent, task.assigned_agent_id)
+        agent = await Agent.objects.by_id(task.assigned_agent_id).first(session)
         if agent is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         if agent.is_board_lead:
@@ -286,7 +284,7 @@ async def create_task(
     )
     await session.commit()
     if task.assigned_agent_id:
-        assigned_agent = await session.get(Agent, task.assigned_agent_id)
+        assigned_agent = await Agent.objects.by_id(task.assigned_agent_id).first(session)
         if assigned_agent:
             await tasks_api._notify_agent_on_task_assign(
                 session=session,
@@ -466,7 +464,7 @@ async def nudge_agent(
     _guard_board_access(agent_ctx, board)
     if not agent_ctx.agent.is_board_lead:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    target = await session.get(Agent, agent_id)
+    target = await Agent.objects.by_id(agent_id).first(session)
     if target is None or (target.board_id and target.board_id != board.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if not target.openclaw_session_id:
@@ -528,7 +526,7 @@ async def get_agent_soul(
     _guard_board_access(agent_ctx, board)
     if not agent_ctx.agent.is_board_lead and str(agent_ctx.agent.id) != agent_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    target = await session.get(Agent, agent_id)
+    target = await Agent.objects.by_id(agent_id).first(session)
     if target is None or (target.board_id and target.board_id != board.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     config = await _gateway_config(session, board)
@@ -566,7 +564,7 @@ async def update_agent_soul(
     _guard_board_access(agent_ctx, board)
     if not agent_ctx.agent.is_board_lead:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    target = await session.get(Agent, agent_id)
+    target = await Agent.objects.by_id(agent_id).first(session)
     if target is None or (target.board_id and target.board_id != board.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     config = await _gateway_config(session, board)
@@ -629,7 +627,7 @@ async def ask_user_via_gateway_main(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Board is not attached to a gateway",
         )
-    gateway = await session.get(Gateway, board.gateway_id)
+    gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
     if gateway is None or not gateway.url:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -689,9 +687,7 @@ async def ask_user_via_gateway_main(
         agent_id=agent_ctx.agent.id,
     )
 
-    main_agent = (
-        await session.exec(select(Agent).where(col(Agent.openclaw_session_id) == main_session_key))
-    ).first()
+    main_agent = await Agent.objects.filter_by(openclaw_session_id=main_session_key).first(session)
 
     await session.commit()
 

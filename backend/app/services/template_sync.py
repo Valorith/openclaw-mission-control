@@ -328,7 +328,7 @@ async def sync_gateway_templates(
         result.errors.append(GatewayTemplatesSyncError(message=str(exc)))
         return result
 
-    boards = list(await session.exec(select(Board).where(col(Board.gateway_id) == gateway.id)))
+    boards = await Board.objects.filter_by(gateway_id=gateway.id).all(session)
     boards_by_id = {board.id: board for board in boards}
     if board_id is not None:
         board = boards_by_id.get(board_id)
@@ -345,12 +345,10 @@ async def sync_gateway_templates(
     paused_board_ids = await _paused_board_ids(session, list(boards_by_id.keys()))
 
     if boards_by_id:
-        agents = list(
-            await session.exec(
-                select(Agent)
-                .where(col(Agent.board_id).in_(list(boards_by_id.keys())))
-                .order_by(col(Agent.created_at).asc())
-            )
+        agents = await (
+            Agent.objects.by_field_in("board_id", list(boards_by_id.keys()))
+            .order_by(col(Agent.created_at).asc())
+            .all(session)
         )
     else:
         agents = []
@@ -471,10 +469,10 @@ async def sync_gateway_templates(
 
     if include_main:
         main_agent = (
-            await session.exec(
-                select(Agent).where(col(Agent.openclaw_session_id) == gateway.main_session_key)
-            )
-        ).first()
+            await Agent.objects.all()
+            .filter(col(Agent.openclaw_session_id) == gateway.main_session_key)
+            .first(session)
+        )
         if main_agent is None:
             result.errors.append(
                 GatewayTemplatesSyncError(

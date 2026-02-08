@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from sqlmodel import SQLModel
+from app.models.base import QueryModel
 
 
-class TenantScoped(SQLModel, table=False):
+class TenantScoped(QueryModel, table=False):
     pass

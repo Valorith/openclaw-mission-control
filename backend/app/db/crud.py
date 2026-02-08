@@ -27,7 +27,8 @@ def _lookup_statement(model: type[ModelT], lookup: Mapping[str, Any]) -> SelectO
 
 
 async def get_by_id(session: AsyncSession, model: type[ModelT], obj_id: Any) -> ModelT | None:
-    return await session.get(model, obj_id)
+    stmt = _lookup_statement(model, {"id": obj_id}).limit(1)
+    return (await session.exec(stmt)).first()
 
 
 async def get(session: AsyncSession, model: type[ModelT], **lookup: Any) -> ModelT:

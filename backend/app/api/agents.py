@@ -109,7 +109,7 @@ async def _require_board(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="board_id is required",
         )
-    board = await session.get(Board, board_id)
+    board = await Board.objects.by_id(board_id).first(session)
     if board is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Board not found")
     if user is not None:
@@ -125,7 +125,7 @@ async def _require_gateway(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Board gateway_id is required",
         )
-    gateway = await session.get(Gateway, board.gateway_id)
+    gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
     if gateway is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -182,9 +182,7 @@ async def _find_gateway_for_main_session(
 ) -> Gateway | None:
     if not session_key:
         return None
-    return (
-        await session.exec(select(Gateway).where(Gateway.main_session_key == session_key))
-    ).first()
+    return await Gateway.objects.filter_by(main_session_key=session_key).first(session)
 
 
 async def _ensure_gateway_session(
@@ -237,7 +235,7 @@ async def _require_user_context(session: AsyncSession, user: User | None) -> Org
     member = await get_active_membership(session, user)
     if member is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    organization = await session.get(Organization, member.organization_id)
+    organization = await Organization.objects.by_id(member.organization_id).first(session)
     if organization is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     return OrganizationContext(organization=organization, member=member)
@@ -258,7 +256,7 @@ async def _require_agent_access(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return
 
-    board = await session.get(Board, agent.board_id)
+    board = await Board.objects.by_id(agent.board_id).first(session)
     if board is None or board.organization_id != ctx.organization.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if not await has_board_access(session, member=ctx.member, board=board, write=write):
@@ -323,7 +321,7 @@ async def list_agents(
     if board_id is not None:
         statement = statement.where(col(Agent.board_id) == board_id)
     if gateway_id is not None:
-        gateway = await session.get(Gateway, gateway_id)
+        gateway = await Gateway.objects.by_id(gateway_id).first(session)
         if gateway is None or gateway.organization_id != ctx.organization.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         statement = statement.join(Board, col(Agent.board_id) == col(Board.id)).where(
@@ -532,7 +530,7 @@ async def get_agent(
     session: AsyncSession = Depends(get_session),
     ctx: OrganizationContext = Depends(require_org_admin),
 ) -> AgentRead:
-    agent = await session.get(Agent, agent_id)
+    agent = await Agent.objects.by_id(agent_id).first(session)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await _require_agent_access(session, agent=agent, ctx=ctx, write=False)
@@ -549,7 +547,7 @@ async def update_agent(
     auth: AuthContext = Depends(get_auth_context),
     ctx: OrganizationContext = Depends(require_org_admin),
 ) -> AgentRead:
-    agent = await session.get(Agent, agent_id)
+    agent = await Agent.objects.by_id(agent_id).first(session)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await _require_agent_access(session, agent=agent, ctx=ctx, write=True)
@@ -728,7 +726,7 @@ async def heartbeat_agent(
     session: AsyncSession = Depends(get_session),
     actor: ActorContext = Depends(require_admin_or_agent),
 ) -> AgentRead:
-    agent = await session.get(Agent, agent_id)
+    agent = await Agent.objects.by_id(agent_id).first(session)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if actor.actor_type == "agent" and actor.agent and actor.agent.id != agent.id:
@@ -767,7 +765,7 @@ async def heartbeat_or_create_agent(
             actor=actor,
         )
 
-    statement = select(Agent).where(Agent.name == payload.name)
+    statement = Agent.objects.filter_by(name=payload.name).statement
     if payload.board_id is not None:
         statement = statement.where(Agent.board_id == payload.board_id)
     agent = (await session.exec(statement)).first()
@@ -943,7 +941,7 @@ async def delete_agent(
     session: AsyncSession = Depends(get_session),
     ctx: OrganizationContext = Depends(require_org_admin),
 ) -> OkResponse:
-    agent = await session.get(Agent, agent_id)
+    agent = await Agent.objects.by_id(agent_id).first(session)
     if agent is None:
         return OkResponse()
     await _require_agent_access(session, agent=agent, ctx=ctx, write=True)

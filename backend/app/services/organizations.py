@@ -19,7 +19,6 @@ from app.models.organization_invites import OrganizationInvite
 from app.models.organization_members import OrganizationMember
 from app.models.organizations import Organization
 from app.models.users import User
-from app.queries import organizations as org_queries
 from app.schemas.organizations import OrganizationBoardAccessSpec, OrganizationMemberAccessUpdate
 
 DEFAULT_ORG_NAME = "Personal"
@@ -38,7 +37,7 @@ def is_org_admin(member: OrganizationMember) -> bool:
 
 
 async def get_default_org(session: AsyncSession) -> Organization | None:
-    return await org_queries.organization_by_name(DEFAULT_ORG_NAME).first(session)
+    return await Organization.objects.filter_by(name=DEFAULT_ORG_NAME).first(session)
 
 
 async def ensure_default_org(session: AsyncSession) -> Organization:
@@ -58,14 +57,18 @@ async def get_member(
     user_id: UUID,
     organization_id: UUID,
 ) -> OrganizationMember | None:
-    return await org_queries.member_by_user_and_org(
+    return await OrganizationMember.objects.filter_by(
         user_id=user_id,
         organization_id=organization_id,
     ).first(session)
 
 
 async def get_first_membership(session: AsyncSession, user_id: UUID) -> OrganizationMember | None:
-    return await org_queries.first_membership_for_user(user_id).first(session)
+    return (
+        await OrganizationMember.objects.filter_by(user_id=user_id)
+        .order_by(col(OrganizationMember.created_at).asc())
+        .first(session)
+    )
 
 
 async def set_active_organization(
@@ -88,7 +91,7 @@ async def get_active_membership(
     session: AsyncSession,
     user: User,
 ) -> OrganizationMember | None:
-    db_user = await session.get(User, user.id)
+    db_user = await User.objects.by_id(user.id).first(session)
     if db_user is None:
         db_user = user
     if db_user.active_organization_id:
@@ -119,7 +122,14 @@ async def _find_pending_invite(
     session: AsyncSession,
     email: str,
 ) -> OrganizationInvite | None:
-    return await org_queries.pending_invite_by_email(email).first(session)
+    return (
+        await OrganizationInvite.objects.filter(
+            col(OrganizationInvite.accepted_at).is_(None),
+            col(OrganizationInvite.invited_email) == email,
+        )
+        .order_by(col(OrganizationInvite.created_at).asc())
+        .first(session)
+    )
 
 
 async def accept_invite(
@@ -230,7 +240,7 @@ async def has_board_access(
     else:
         if member_all_boards_read(member):
             return True
-    access = await org_queries.board_access_for_member_and_board(
+    access = await OrganizationBoardAccess.objects.filter_by(
         organization_member_id=member.id,
         board_id=board.id,
     ).first(session)

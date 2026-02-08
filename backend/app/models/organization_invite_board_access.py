@@ -4,12 +4,13 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field
 
 from app.core.time import utcnow
+from app.models.base import QueryModel
 
 
-class OrganizationInviteBoardAccess(SQLModel, table=True):
+class OrganizationInviteBoardAccess(QueryModel, table=True):
     __tablename__ = "organization_invite_board_access"
     __table_args__ = (
         UniqueConstraint(

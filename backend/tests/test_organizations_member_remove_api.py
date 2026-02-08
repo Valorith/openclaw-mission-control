@@ -28,7 +28,6 @@ class _FakeExecResult:
 @dataclass
 class _FakeSession:
     exec_results: list[Any]
-    get_results: dict[tuple[type[Any], Any], Any] = field(default_factory=dict)
 
     executed: list[Any] = field(default_factory=list)
     deleted: list[Any] = field(default_factory=list)
@@ -43,9 +42,6 @@ class _FakeSession:
         if not self.exec_results:
             raise AssertionError("No more exec_results left for session.exec")
         return self.exec_results.pop(0)
-
-    async def get(self, model: type[Any], key: Any) -> Any:
-        return self.get_results.get((model, key))
 
     async def execute(self, statement: Any) -> None:
         self.executed.append(statement)
@@ -79,11 +75,11 @@ async def test_remove_org_member_deletes_member_access_and_member() -> None:
         active_organization_id=org_id,
     )
     session = _FakeSession(
-        exec_results=[_FakeExecResult(first_value=fallback_org_id)],
-        get_results={
-            (OrganizationMember, member_id): member,
-            (User, target_user_id): user,
-        },
+        exec_results=[
+            _FakeExecResult(first_value=member),
+            _FakeExecResult(first_value=user),
+            _FakeExecResult(first_value=fallback_org_id),
+        ],
     )
     ctx = SimpleNamespace(
         organization=SimpleNamespace(id=org_id),
@@ -110,10 +106,7 @@ async def test_remove_org_member_disallows_self_removal() -> None:
         user_id=user_id,
         role="member",
     )
-    session = _FakeSession(
-        exec_results=[],
-        get_results={(OrganizationMember, member.id): member},
-    )
+    session = _FakeSession(exec_results=[_FakeExecResult(first_value=member)])
     ctx = SimpleNamespace(
         organization=SimpleNamespace(id=org_id),
         member=SimpleNamespace(user_id=user_id, role="owner"),
@@ -137,10 +130,7 @@ async def test_remove_org_member_requires_owner_to_remove_owner() -> None:
         user_id=uuid4(),
         role="owner",
     )
-    session = _FakeSession(
-        exec_results=[],
-        get_results={(OrganizationMember, member.id): member},
-    )
+    session = _FakeSession(exec_results=[_FakeExecResult(first_value=member)])
     ctx = SimpleNamespace(
         organization=SimpleNamespace(id=org_id),
         member=SimpleNamespace(user_id=uuid4(), role="admin"),
@@ -165,8 +155,10 @@ async def test_remove_org_member_rejects_removing_last_owner() -> None:
         role="owner",
     )
     session = _FakeSession(
-        exec_results=[_FakeExecResult(all_values=[member.id])],
-        get_results={(OrganizationMember, member.id): member},
+        exec_results=[
+            _FakeExecResult(first_value=member),
+            _FakeExecResult(all_values=[member]),
+        ],
     )
     ctx = SimpleNamespace(
         organization=SimpleNamespace(id=org_id),

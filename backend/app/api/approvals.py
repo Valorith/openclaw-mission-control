@@ -77,9 +77,8 @@ async def _fetch_approval_events(
     since: datetime,
 ) -> list[Approval]:
     statement = (
-        select(Approval)
-        .where(col(Approval.board_id) == board_id)
-        .where(
+        Approval.objects.filter_by(board_id=board_id)
+        .filter(
             or_(
                 col(Approval.created_at) >= since,
                 col(Approval.resolved_at) >= since,
@@ -87,7 +86,7 @@ async def _fetch_approval_events(
         )
         .order_by(asc(col(Approval.created_at)))
     )
-    return list(await session.exec(statement))
+    return await statement.all(session)
 
 
 @router.get("", response_model=DefaultLimitOffsetPage[ApprovalRead])
@@ -97,11 +96,11 @@ async def list_approvals(
     session: AsyncSession = Depends(get_session),
     actor: ActorContext = Depends(require_admin_or_agent),
 ) -> DefaultLimitOffsetPage[ApprovalRead]:
-    statement = select(Approval).where(col(Approval.board_id) == board.id)
+    statement = Approval.objects.filter_by(board_id=board.id)
     if status_filter:
-        statement = statement.where(col(Approval.status) == status_filter)
+        statement = statement.filter(col(Approval.status) == status_filter)
     statement = statement.order_by(col(Approval.created_at).desc())
-    return await paginate(session, statement)
+    return await paginate(session, statement.statement)
 
 
 @router.get("/stream")
@@ -207,7 +206,7 @@ async def update_approval(
     board: Board = Depends(get_board_for_user_write),
     session: AsyncSession = Depends(get_session),
 ) -> Approval:
-    approval = await session.get(Approval, approval_id)
+    approval = await Approval.objects.by_id(approval_id).first(session)
     if approval is None or approval.board_id != board.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     updates = payload.model_dump(exclude_unset=True)

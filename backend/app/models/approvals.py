@@ -4,12 +4,13 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, Column
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field
 
 from app.core.time import utcnow
+from app.models.base import QueryModel
 
 
-class Approval(SQLModel, table=True):
+class Approval(QueryModel, table=True):
     __tablename__ = "approvals"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)

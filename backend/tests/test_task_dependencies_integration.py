@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.boards import Board
@@ -122,7 +122,7 @@ async def test_dependency_queries_and_replace_and_dependents() -> None:
         assert deps_map.get(t2, []) == []
 
         # mark t2 done, t3 not
-        task2 = await session.get(Task, t2)
+        task2 = (await session.exec(select(Task).where(col(Task.id) == t2))).first()
         assert task2 is not None
         task2.status = td.DONE_STATUS
         await session.commit()

@@ -17,6 +17,13 @@ class QuerySet(Generic[ModelT]):
     def filter(self, *criteria: Any) -> QuerySet[ModelT]:
         return replace(self, statement=self.statement.where(*criteria))
 
+    def where(self, *criteria: Any) -> QuerySet[ModelT]:
+        return self.filter(*criteria)
+
+    def filter_by(self, **kwargs: Any) -> QuerySet[ModelT]:
+        statement = self.statement.filter_by(**kwargs)
+        return replace(self, statement=statement)
+
     def order_by(self, *ordering: Any) -> QuerySet[ModelT]:
         return replace(self, statement=self.statement.order_by(*ordering))
 

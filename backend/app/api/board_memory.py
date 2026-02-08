@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func
-from sqlmodel import col, select
+from sqlmodel import col
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
@@ -58,7 +58,7 @@ def _serialize_memory(memory: BoardMemory) -> dict[str, object]:
 async def _gateway_config(session: AsyncSession, board: Board) -> GatewayClientConfig | None:
     if board.gateway_id is None:
         return None
-    gateway = await session.get(Gateway, board.gateway_id)
+    gateway = await Gateway.objects.by_id(board.gateway_id).first(session)
     if gateway is None or not gateway.url:
         return None
     return GatewayClientConfig(url=gateway.url, token=gateway.token)
@@ -83,17 +83,17 @@ async def _fetch_memory_events(
     is_chat: bool | None = None,
 ) -> list[BoardMemory]:
     statement = (
-        select(BoardMemory).where(col(BoardMemory.board_id) == board_id)
+        BoardMemory.objects.filter_by(board_id=board_id)
         # Old/invalid rows (empty/whitespace-only content) can exist; exclude them to
         # satisfy the NonEmptyStr response schema.
-        .where(func.length(func.trim(col(BoardMemory.content))) > 0)
+        .filter(func.length(func.trim(col(BoardMemory.content))) > 0)
     )
     if is_chat is not None:
-        statement = statement.where(col(BoardMemory.is_chat) == is_chat)
-    statement = statement.where(col(BoardMemory.created_at) >= since).order_by(
+        statement = statement.filter(col(BoardMemory.is_chat) == is_chat)
+    statement = statement.filter(col(BoardMemory.created_at) >= since).order_by(
         col(BoardMemory.created_at)
     )
-    return list(await session.exec(statement))
+    return await statement.all(session)
 
 
 async def _notify_chat_targets(
@@ -114,8 +114,7 @@ async def _notify_chat_targets(
     # Special-case control commands to reach all board agents.
     # These are intended to be parsed verbatim by agent runtimes.
     if command in {"/pause", "/resume"}:
-        statement = select(Agent).where(col(Agent.board_id) == board.id)
-        pause_targets: list[Agent] = list(await session.exec(statement))
+        pause_targets: list[Agent] = await Agent.objects.filter_by(board_id=board.id).all(session)
         for agent in pause_targets:
             if actor.actor_type == "agent" and actor.agent and agent.id == actor.agent.id:
                 continue
@@ -134,9 +133,8 @@ async def _notify_chat_targets(
         return
 
     mentions = extract_mentions(memory.content)
-    statement = select(Agent).where(col(Agent.board_id) == board.id)
     targets: dict[str, Agent] = {}
-    for agent in await session.exec(statement):
+    for agent in await Agent.objects.filter_by(board_id=board.id).all(session):
         if agent.is_board_lead:
             targets[str(agent.id)] = agent
             continue
@@ -188,15 +186,15 @@ async def list_board_memory(
     actor: ActorContext = Depends(require_admin_or_agent),
 ) -> DefaultLimitOffsetPage[BoardMemoryRead]:
     statement = (
-        select(BoardMemory).where(col(BoardMemory.board_id) == board.id)
+        BoardMemory.objects.filter_by(board_id=board.id)
         # Old/invalid rows (empty/whitespace-only content) can exist; exclude them to
         # satisfy the NonEmptyStr response schema.
-        .where(func.length(func.trim(col(BoardMemory.content))) > 0)
+        .filter(func.length(func.trim(col(BoardMemory.content))) > 0)
     )
     if is_chat is not None:
-        statement = statement.where(col(BoardMemory.is_chat) == is_chat)
+        statement = statement.filter(col(BoardMemory.is_chat) == is_chat)
     statement = statement.order_by(col(BoardMemory.created_at).desc())
-    return await paginate(session, statement)
+    return await paginate(session, statement.statement)
 
 
 @router.get("/stream")
