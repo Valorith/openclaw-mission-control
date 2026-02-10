@@ -6,7 +6,6 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from app.integrations.openclaw_gateway import OpenClawGatewayError
 from app.services.openclaw.constants import (
     _COORDINATION_GATEWAY_BASE_DELAY_S,
     _COORDINATION_GATEWAY_MAX_DELAY_S,
@@ -15,6 +14,7 @@ from app.services.openclaw.constants import (
     _SECURE_RANDOM,
     _TRANSIENT_GATEWAY_ERROR_MARKERS,
 )
+from app.services.openclaw.gateway_rpc import OpenClawGatewayError
 
 _T = TypeVar("_T")
 

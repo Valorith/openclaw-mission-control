@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-import app.services.openclaw.agent_service as agent_service
+import app.services.openclaw.provisioning_db as agent_service
 
 
 @dataclass

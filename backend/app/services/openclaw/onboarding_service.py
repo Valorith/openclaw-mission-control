@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from app.integrations.openclaw_gateway import OpenClawGatewayError
 from app.models.board_onboarding import BoardOnboardingSession
 from app.models.boards import Board
 from app.services.openclaw.coordination_service import AbstractGatewayMessagingService
 from app.services.openclaw.exceptions import GatewayOperation, map_gateway_error_to_http_exception
+from app.services.openclaw.gateway_rpc import OpenClawGatewayError
 from app.services.openclaw.shared import (
     GatewayAgentIdentity,
     require_gateway_config_for_board,

@@ -9,11 +9,6 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import require_org_admin
 from app.core.auth import AuthContext, get_auth_context
 from app.db.session import get_session
-from app.integrations.openclaw_gateway_protocol import (
-    GATEWAY_EVENTS,
-    GATEWAY_METHODS,
-    PROTOCOL_VERSION,
-)
 from app.schemas.common import OkResponse
 from app.schemas.gateway_api import (
     GatewayCommandsResponse,
@@ -24,6 +19,7 @@ from app.schemas.gateway_api import (
     GatewaySessionsResponse,
     GatewaysStatusResponse,
 )
+from app.services.openclaw.gateway_rpc import GATEWAY_EVENTS, GATEWAY_METHODS, PROTOCOL_VERSION
 from app.services.openclaw.session_service import GatewaySessionService
 from app.services.organizations import OrganizationContext
 

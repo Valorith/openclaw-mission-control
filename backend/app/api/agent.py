@@ -44,9 +44,9 @@ from app.schemas.gateway_coordination import (
 from app.schemas.pagination import DefaultLimitOffsetPage
 from app.schemas.tasks import TaskCommentCreate, TaskCommentRead, TaskCreate, TaskRead, TaskUpdate
 from app.services.activity_log import record_activity
-from app.services.openclaw.agent_service import AgentLifecycleService
 from app.services.openclaw.coordination_service import GatewayCoordinationService
 from app.services.openclaw.policies import OpenClawAuthorizationPolicy
+from app.services.openclaw.provisioning_db import AgentLifecycleService
 from app.services.task_dependencies import (
     blocked_by_dependency_ids,
     dependency_status_by_id,

@@ -151,7 +151,7 @@ In the Mission Control UI:
 4. Use the "Check connection" action to confirm reachability.
 
 Implementation note (how Mission Control sends tokens):
-- If you provide a token, Mission Control's backend will include it when connecting to the gateway (it attaches it to the URL query string and also sends it in the `connect` params). See `backend/app/integrations/openclaw_gateway.py`.
+- If you provide a token, Mission Control's backend will include it when connecting to the gateway (it attaches it to the URL query string and also sends it in the `connect` params). See `backend/app/services/openclaw/gateway_rpc.py`.
 
 ### Workspace Root (Mission Control) vs Workspace (Gateway)
 

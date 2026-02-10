@@ -8,8 +8,6 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 
-from app.integrations.openclaw_gateway import GatewayConfig as _GatewayClientConfig
-from app.integrations.openclaw_gateway import OpenClawGatewayError, ensure_session, send_message
 from app.models.boards import Board
 from app.models.gateways import Gateway
 from app.services.openclaw.constants import (
@@ -17,6 +15,8 @@ from app.services.openclaw.constants import (
     _GATEWAY_AGENT_SUFFIX,
     _GATEWAY_OPENCLAW_AGENT_PREFIX,
 )
+from app.services.openclaw.gateway_rpc import GatewayConfig as _GatewayClientConfig
+from app.services.openclaw.gateway_rpc import OpenClawGatewayError, ensure_session, send_message
 
 if TYPE_CHECKING:
     from sqlmodel.ext.asyncio.session import AsyncSession

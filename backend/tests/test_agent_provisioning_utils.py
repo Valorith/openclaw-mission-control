@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 
 import app.services.openclaw.provisioning as agent_provisioning
-from app.services.openclaw.agent_service import AgentLifecycleService
+from app.services.openclaw.provisioning_db import AgentLifecycleService
 from app.services.openclaw.shared import GatewayAgentIdentity
 
 

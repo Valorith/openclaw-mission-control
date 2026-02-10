@@ -11,14 +11,6 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlmodel import col
 
-from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
-from app.integrations.openclaw_gateway import (
-    OpenClawGatewayError,
-    ensure_session,
-    get_chat_history,
-    openclaw_call,
-    send_message,
-)
 from app.models.agents import Agent
 from app.models.boards import Board
 from app.models.gateways import Gateway
@@ -29,6 +21,14 @@ from app.schemas.gateway_api import (
     GatewaySessionResponse,
     GatewaySessionsResponse,
     GatewaysStatusResponse,
+)
+from app.services.openclaw.gateway_rpc import GatewayConfig as GatewayClientConfig
+from app.services.openclaw.gateway_rpc import (
+    OpenClawGatewayError,
+    ensure_session,
+    get_chat_history,
+    openclaw_call,
+    send_message,
 )
 from app.services.openclaw.policies import OpenClawAuthorizationPolicy
 from app.services.organizations import require_board_access

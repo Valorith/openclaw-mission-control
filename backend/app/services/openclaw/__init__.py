@@ -1,6 +1,6 @@
 """OpenClaw lifecycle package.
 
-Import concrete modules directly (for example: ``app.services.openclaw.agent_service``)
+Import concrete modules directly (for example: ``app.services.openclaw.provisioning_db``)
 to keep architectural boundaries explicit.
 """
 

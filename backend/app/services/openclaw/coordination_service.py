@@ -14,8 +14,6 @@ from sqlmodel import col, select
 
 from app.core.config import settings
 from app.core.time import utcnow
-from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
-from app.integrations.openclaw_gateway import OpenClawGatewayError, openclaw_call
 from app.models.agents import Agent
 from app.models.boards import Board
 from app.models.gateways import Gateway
@@ -34,6 +32,8 @@ from app.services.openclaw.exceptions import (
     map_gateway_error_message,
     map_gateway_error_to_http_exception,
 )
+from app.services.openclaw.gateway_rpc import GatewayConfig as GatewayClientConfig
+from app.services.openclaw.gateway_rpc import OpenClawGatewayError, openclaw_call
 from app.services.openclaw.internal import agent_key, with_coordination_gateway_retry
 from app.services.openclaw.policies import OpenClawAuthorizationPolicy
 from app.services.openclaw.provisioning_db import (

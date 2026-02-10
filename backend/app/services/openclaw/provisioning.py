@@ -18,13 +18,6 @@ from uuid import uuid4
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from app.core.config import settings
-from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
-from app.integrations.openclaw_gateway import (
-    OpenClawGatewayError,
-    ensure_session,
-    openclaw_call,
-    send_message,
-)
 from app.models.agents import Agent
 from app.models.boards import Board
 from app.models.gateways import Gateway
@@ -39,6 +32,13 @@ from app.services.openclaw.constants import (
     IDENTITY_PROFILE_FIELDS,
     MAIN_TEMPLATE_MAP,
     PRESERVE_AGENT_EDITABLE_FILES,
+)
+from app.services.openclaw.gateway_rpc import GatewayConfig as GatewayClientConfig
+from app.services.openclaw.gateway_rpc import (
+    OpenClawGatewayError,
+    ensure_session,
+    openclaw_call,
+    send_message,
 )
 from app.services.openclaw.internal import agent_key as _agent_key
 from app.services.openclaw.shared import GatewayAgentIdentity

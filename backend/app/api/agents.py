@@ -21,7 +21,7 @@ from app.schemas.agents import (
 )
 from app.schemas.common import OkResponse
 from app.schemas.pagination import DefaultLimitOffsetPage
-from app.services.openclaw.agent_service import AgentLifecycleService, AgentUpdateOptions
+from app.services.openclaw.provisioning_db import AgentLifecycleService, AgentUpdateOptions
 from app.services.organizations import OrganizationContext
 
 if TYPE_CHECKING:

@@ -14,11 +14,6 @@ from app.core.agent_tokens import generate_agent_token, hash_agent_token
 from app.core.auth import AuthContext
 from app.core.time import utcnow
 from app.db import crud
-from app.integrations.openclaw_gateway import GatewayConfig as GatewayClientConfig
-from app.integrations.openclaw_gateway import (
-    OpenClawGatewayError,
-    openclaw_call,
-)
 from app.models.activity_events import ActivityEvent
 from app.models.agents import Agent
 from app.models.approvals import Approval
@@ -26,6 +21,8 @@ from app.models.gateways import Gateway
 from app.models.tasks import Task
 from app.schemas.gateways import GatewayTemplatesSyncResult
 from app.services.openclaw.constants import DEFAULT_HEARTBEAT_CONFIG
+from app.services.openclaw.gateway_rpc import GatewayConfig as GatewayClientConfig
+from app.services.openclaw.gateway_rpc import OpenClawGatewayError, openclaw_call
 from app.services.openclaw.provisioning import OpenClawGatewayProvisioner
 from app.services.openclaw.provisioning_db import (
     GatewayTemplateSyncOptions,

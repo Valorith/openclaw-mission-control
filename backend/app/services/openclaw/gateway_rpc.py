@@ -1,4 +1,9 @@
-"""OpenClaw gateway client helpers for websocket RPC calls."""
+"""OpenClaw gateway websocket RPC client and protocol constants.
+
+This is the low-level, DB-free interface for talking to the OpenClaw gateway.
+Keep gateway RPC protocol details and client helpers here so OpenClaw services
+operate within a single scope (no `app.integrations.*` plumbing).
+"""
 
 from __future__ import annotations
 
@@ -12,18 +17,131 @@ from uuid import uuid4
 import websockets
 from websockets.exceptions import WebSocketException
 
-from app.integrations.openclaw_gateway_protocol import PROTOCOL_VERSION
+PROTOCOL_VERSION = 3
+
+# NOTE: These are the base gateway methods from the OpenClaw gateway repo.
+# The gateway can expose additional methods at runtime via channel plugins.
+GATEWAY_METHODS = [
+    "health",
+    "logs.tail",
+    "channels.status",
+    "channels.logout",
+    "status",
+    "usage.status",
+    "usage.cost",
+    "tts.status",
+    "tts.providers",
+    "tts.enable",
+    "tts.disable",
+    "tts.convert",
+    "tts.setProvider",
+    "config.get",
+    "config.set",
+    "config.apply",
+    "config.patch",
+    "config.schema",
+    "exec.approvals.get",
+    "exec.approvals.set",
+    "exec.approvals.node.get",
+    "exec.approvals.node.set",
+    "exec.approval.request",
+    "exec.approval.resolve",
+    "wizard.start",
+    "wizard.next",
+    "wizard.cancel",
+    "wizard.status",
+    "talk.mode",
+    "models.list",
+    "agents.list",
+    "agents.create",
+    "agents.update",
+    "agents.delete",
+    "agents.files.list",
+    "agents.files.get",
+    "agents.files.set",
+    "skills.status",
+    "skills.bins",
+    "skills.install",
+    "skills.update",
+    "update.run",
+    "voicewake.get",
+    "voicewake.set",
+    "sessions.list",
+    "sessions.preview",
+    "sessions.patch",
+    "sessions.reset",
+    "sessions.delete",
+    "sessions.compact",
+    "last-heartbeat",
+    "set-heartbeats",
+    "wake",
+    "node.pair.request",
+    "node.pair.list",
+    "node.pair.approve",
+    "node.pair.reject",
+    "node.pair.verify",
+    "device.pair.list",
+    "device.pair.approve",
+    "device.pair.reject",
+    "device.token.rotate",
+    "device.token.revoke",
+    "node.rename",
+    "node.list",
+    "node.describe",
+    "node.invoke",
+    "node.invoke.result",
+    "node.event",
+    "cron.list",
+    "cron.status",
+    "cron.add",
+    "cron.update",
+    "cron.remove",
+    "cron.run",
+    "cron.runs",
+    "system-presence",
+    "system-event",
+    "send",
+    "agent",
+    "agent.identity.get",
+    "agent.wait",
+    "browser.request",
+    "chat.history",
+    "chat.abort",
+    "chat.send",
+]
+
+GATEWAY_EVENTS = [
+    "connect.challenge",
+    "agent",
+    "chat",
+    "presence",
+    "tick",
+    "talk.mode",
+    "shutdown",
+    "health",
+    "heartbeat",
+    "cron",
+    "node.pair.requested",
+    "node.pair.resolved",
+    "node.invoke.request",
+    "device.pair.requested",
+    "device.pair.resolved",
+    "voicewake.changed",
+    "exec.approval.requested",
+    "exec.approval.resolved",
+]
+
+GATEWAY_METHODS_SET = frozenset(GATEWAY_METHODS)
+GATEWAY_EVENTS_SET = frozenset(GATEWAY_EVENTS)
+
+
+def is_known_gateway_method(method: str) -> bool:
+    """Return whether a method name is part of the known base gateway methods."""
+    return method in GATEWAY_METHODS_SET
 
 
 class OpenClawGatewayError(RuntimeError):
     """Raised when OpenClaw gateway calls fail."""
-
-
-@dataclass
-class OpenClawResponse:
-    """Container for raw OpenClaw payloads."""
-
-    payload: Any
 
 
 @dataclass(frozen=True)
@@ -37,7 +155,7 @@ class GatewayConfig:
 def _build_gateway_url(config: GatewayConfig) -> str:
     base_url: str = (config.url or "").strip()
     if not base_url:
-        message = "Gateway URL is not configured for this board."
+        message = "Gateway URL is not configured."
         raise OpenClawGatewayError(message)
     token = config.token
     if not token:
