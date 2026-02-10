@@ -16,10 +16,10 @@
 From repo root:
 - `make setup`: install/sync backend + frontend dependencies.
 - `make check`: CI-equivalent suite (lint, typecheck, tests/coverage, frontend build).
-- `docker compose -f compose.yml --env-file .env up -d --build`: run full stack (Postgres + Redis included).
+- `docker compose -f compose.yml --env-file .env up -d --build`: run full stack.
 
 Fast local dev:
-- `docker compose -f compose.yml --env-file .env up -d db redis`
+- `docker compose -f compose.yml --env-file .env up -d db`
 - Backend: `cd backend && uv sync --extra dev && uv run uvicorn app.main:app --reload --port 8000`
 - Frontend: `cd frontend && npm install && npm run dev`
 - API client: `make api-gen` (backend must be running on `127.0.0.1:8000`).

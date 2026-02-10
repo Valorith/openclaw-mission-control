@@ -8,7 +8,6 @@ At a high level:
 - The **frontend** is a Next.js app used by humans.
 - The **backend** is a FastAPI service that exposes REST endpoints under `/api/v1/*`.
 - **Postgres** stores core state (boards/tasks/agents/etc.).
-- **Redis** supports async/background primitives (RQ queue scaffolding exists).
 
 ## Components
 
@@ -20,7 +19,6 @@ flowchart LR
   FE -->|HTTP /api/v1/*| BE[FastAPI Backend :8000]
 
   BE -->|SQL| PG[(Postgres :5432)]
-  BE -->|Redis protocol| R[(Redis :6379)]
 
   BE -->|WebSocket (optional integration)| GW[OpenClaw Gateway]
   GW --> OC[OpenClaw runtime]
@@ -50,8 +48,6 @@ flowchart LR
 - **Postgres**: persistence for boards/tasks/agents/approvals/etc.
   - Models: `backend/app/models/*`
   - Migrations: `backend/migrations/*`
-- **Redis**: used for background primitives.
-  - RQ helper: `backend/app/workers/queue.py`
 
 ### Gateway integration (optional)
 Mission Control can call into an OpenClaw Gateway over WebSockets.
@@ -64,7 +60,7 @@ Mission Control can call into an OpenClaw Gateway over WebSockets.
 ### UI → API
 1. Browser loads the Next.js frontend.
 2. Frontend calls backend endpoints under `/api/v1/*`.
-3. Backend reads/writes Postgres and may use Redis depending on the operation.
+3. Backend reads/writes Postgres.
 
 ### Auth (Clerk — required for now)
 - **Frontend** enables Clerk when a publishable key is present/valid.
@@ -76,11 +72,8 @@ Automation/agents can use the “agent” API surface:
 - Endpoints under `/api/v1/agent/*` (router: `backend/app/api/agent.py`).
 - Auth via `X-Agent-Token` (see `backend/app/core/agent_auth.py`, referenced from `backend/app/api/deps.py`).
 
-### Background jobs (RQ / Redis)
-The codebase includes RQ/Redis dependencies and a queue helper (`backend/app/workers/queue.py`).
-If/when background jobs are added, the expected shape is:
-- API enqueues work to Redis.
-- A separate RQ worker process executes queued jobs.
+### Background jobs
+There is currently no queue runtime configured in this repo.
 
 ## Key directories
 

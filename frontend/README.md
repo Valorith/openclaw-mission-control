@@ -128,7 +128,7 @@ npm run api:gen    # regenerate typed API client via Orval
 
 There is a `frontend/Dockerfile` used by the root `compose.yml`.
 
-If you’re working on self-hosting, prefer running compose from the repo root so the backend/db/redis are aligned with the documented ports/env.
+If you’re working on self-hosting, prefer running compose from the repo root so the backend/db are aligned with the documented ports/env.
 
 ## Troubleshooting
 

@@ -52,7 +52,10 @@ def _parse_args() -> argparse.Namespace:
 async def _run() -> int:
     from app.db.session import async_session_maker
     from app.models.gateways import Gateway
-    from app.services.openclaw import GatewayTemplateSyncOptions, sync_gateway_templates
+    from app.services.openclaw.provisioning import (
+        GatewayTemplateSyncOptions,
+        sync_gateway_templates,
+    )
 
     args = _parse_args()
     gateway_id = UUID(args.gateway_id)

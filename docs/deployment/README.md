@@ -4,14 +4,13 @@ This guide covers how to self-host **OpenClaw Mission Control** using the reposi
 
 > Scope
 > - This is a **dev-friendly self-host** setup intended for local or single-host deployments.
-> - For production hardening (TLS, backups, external Postgres/Redis, observability), see **Production notes** below.
+> - For production hardening (TLS, backups, external Postgres, observability), see **Production notes** below.
 
 ## What you get
 
 When running Compose, you get:
 
 - **Postgres** database (persistent volume)
-- **Redis** (persistent volume)
 - **Backend API** (FastAPI) on `http://localhost:${BACKEND_PORT:-8000}`
   - Health check: `GET /healthz`
 - **Frontend UI** (Next.js) on `http://localhost:${FRONTEND_PORT:-3000}`
@@ -61,7 +60,6 @@ curl -I http://localhost:${FRONTEND_PORT:-3000}/
 `compose.yml` defines:
 
 - `db` (Postgres 16)
-- `redis` (Redis 7)
 - `backend` (FastAPI)
 - `frontend` (Next.js)
 
@@ -70,7 +68,6 @@ curl -I http://localhost:${FRONTEND_PORT:-3000}/
 By default:
 
 - Postgres: `5432` (`POSTGRES_PORT`)
-- Redis: `6379` (`REDIS_PORT`)
 - Backend: `8000` (`BACKEND_PORT`)
 - Frontend: `3000` (`FRONTEND_PORT`)
 
@@ -81,7 +78,6 @@ Ports are sourced from `.env` (passed via `--env-file .env`) and wired into `com
 Compose creates named volumes:
 
 - `postgres_data` → Postgres data directory
-- `redis_data` → Redis data directory
 
 These persist across `docker compose down`.
 
@@ -100,7 +96,7 @@ docker compose -f compose.yml --env-file .env ...
 
 ### Backend env
 
-The backend container loads `./backend/.env.example` via `env_file` and then overrides DB/Redis URLs for container networking.
+The backend container loads `./backend/.env.example` via `env_file` and then overrides the DB URL for container networking.
 
 If you need backend customization, prefer creating a real `backend/.env` and updating compose to use it (optional improvement).
 
@@ -174,8 +170,6 @@ docker compose -f compose.yml --env-file .env logs -f --tail=200
   - If the repo doesn’t have `frontend/public`, the Dockerfile should not `COPY public/`.
 - **Backend build fails looking for `uv.lock`**
   - If backend build context is repo root, Dockerfile must copy `backend/uv.lock` not `uv.lock`.
-- **Redis warning about `vm.overcommit_memory`**
-  - Usually non-fatal for dev; for stability under load, set `vm.overcommit_memory=1` on the host.
 
 ## Reset / start fresh
 
@@ -185,7 +179,7 @@ Safe (keeps volumes/data):
 docker compose -f compose.yml --env-file .env down
 ```
 
-Destructive (removes volumes; deletes Postgres/Redis data):
+Destructive (removes volumes; deletes Postgres data):
 
 ```bash
 docker compose -f compose.yml --env-file .env down -v
@@ -195,7 +189,7 @@ docker compose -f compose.yml --env-file .env down -v
 
 If you’re running this beyond local dev, consider:
 
-- Run Postgres and Redis as managed services (or on separate hosts)
+- Run Postgres as a managed service (or on a separate host)
 - Add TLS termination (reverse proxy)
 - Configure backups for Postgres volume
 - Set explicit resource limits and healthchecks

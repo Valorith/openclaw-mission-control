@@ -35,7 +35,7 @@ class GatewayConfig:
 
 
 def _build_gateway_url(config: GatewayConfig) -> str:
-    base_url = (config.url or "").strip()
+    base_url: str = (config.url or "").strip()
     if not base_url:
         message = "Gateway URL is not configured for this board."
         raise OpenClawGatewayError(message)
@@ -44,11 +44,11 @@ def _build_gateway_url(config: GatewayConfig) -> str:
         return base_url
     parsed = urlparse(base_url)
     query = urlencode({"token": token})
-    return urlunparse(parsed._replace(query=query))
+    return str(urlunparse(parsed._replace(query=query)))
 
 
 async def _await_response(
-    ws: websockets.WebSocketClientProtocol,
+    ws: websockets.ClientConnection,
     request_id: str,
 ) -> object:
     while True:
@@ -70,7 +70,7 @@ async def _await_response(
 
 
 async def _send_request(
-    ws: websockets.WebSocketClientProtocol,
+    ws: websockets.ClientConnection,
     method: str,
     params: dict[str, Any] | None,
 ) -> object:
@@ -102,7 +102,7 @@ def _build_connect_params(config: GatewayConfig) -> dict[str, Any]:
 
 
 async def _ensure_connected(
-    ws: websockets.WebSocketClientProtocol,
+    ws: websockets.ClientConnection,
     first_message: str | bytes | None,
     config: GatewayConfig,
 ) -> None:

@@ -13,7 +13,7 @@ OpenClaw Mission Control is under active development. Expect breaking changes an
 
 - **Frontend:** Next.js app (default http://localhost:3000)
 - **Backend:** FastAPI service (default http://localhost:8000)
-- **Data:** Postgres + Redis
+- **Data:** Postgres
 - **Gateway integration:** see [`docs/openclaw_gateway_ws.md`](./docs/openclaw_gateway_ws.md)
 
 > Note on auth (Clerk)
@@ -65,13 +65,13 @@ docker compose -f compose.yml --env-file .env logs -f --tail=200
 # Rebuild a single service
 docker compose -f compose.yml --env-file .env up -d --build backend
 
-# Reset data (DESTRUCTIVE: deletes Postgres/Redis volumes)
+# Reset data (DESTRUCTIVE: deletes Postgres volume)
 docker compose -f compose.yml --env-file .env down -v
 ```
 
 ## Quick start (local development)
 
-This is the fastest workflow for contributors: run Postgres/Redis via Docker, and run the backend + frontend in dev mode.
+This is the fastest workflow for contributors: run Postgres via Docker, and run the backend + frontend in dev mode.
 
 ### Prerequisites
 
@@ -79,12 +79,12 @@ This is the fastest workflow for contributors: run Postgres/Redis via Docker, an
 - Python **3.12+** + [`uv`](https://github.com/astral-sh/uv)
 - Node.js (recommend 18+) + npm
 
-### 1) Start Postgres + Redis
+### 1) Start Postgres
 
 ```bash
 cp .env.example .env
 
-docker compose -f compose.yml --env-file .env up -d db redis
+docker compose -f compose.yml --env-file .env up -d db
 ```
 
 ### 2) Backend (FastAPI)
@@ -103,7 +103,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Notes:
 
-- If you run the DB/Redis containers, the backend should use the defaults in `backend/.env` (`localhost:5432` and `localhost:6379`).
+- If you run the DB container, the backend should use the default in `backend/.env` (`localhost:5432`).
 - Database migrations:
 
   ```bash
@@ -137,7 +137,6 @@ When running Cypress (`cd frontend && npm run e2e`), make sure `NEXT_PUBLIC_API_
 - **Mission Control backend** exposes a REST API at `/api/v1/*` and also hosts health endpoints (`/healthz`, `/readyz`).
 - **Mission Control frontend** calls the backend via `NEXT_PUBLIC_API_URL`.
 - **Postgres** stores boards/tasks/agents/etc.
-- **Redis** is used for background work (RQ).
 - **OpenClaw Gateway** connectivity is over WebSockets; protocol details live in [`docs/openclaw_gateway_ws.md`](./docs/openclaw_gateway_ws.md).
 
 ## Common commands
@@ -178,7 +177,7 @@ You likely have `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` set (even to a placeholder).
 
 - Remove the `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` line from `frontend/.env.local`, **or** set it to an empty value.
 
-### Backend can’t connect to Postgres/Redis
+### Backend can’t connect to Postgres
 
 - Confirm containers are up:
 
@@ -188,7 +187,6 @@ You likely have `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` set (even to a placeholder).
 
 - If you’re running backend locally (not in compose), make sure `backend/.env` points to `localhost`:
   - `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/mission_control`
-  - `REDIS_URL=redis://localhost:6379/0`
 
 ### Port already in use
 
@@ -197,7 +195,6 @@ Adjust ports in `.env` (copied from `.env.example`):
 - `FRONTEND_PORT`
 - `BACKEND_PORT`
 - `POSTGRES_PORT`
-- `REDIS_PORT`
 
 ## Star History
 

@@ -11,16 +11,15 @@ This directory contains the **Mission Control backend API** (FastAPI + SQLModel)
 - Python **3.12+**
 - [`uv`](https://github.com/astral-sh/uv) (recommended; used by this repo)
 - Postgres (local or Docker)
-- Redis (local or Docker)
 
-## Quick start (local backend + Docker Postgres/Redis)
+## Quick start (local backend + Docker Postgres)
 
 From the repo root:
 
 ```bash
 # start dependencies
 cp .env.example .env
-docker compose -f compose.yml --env-file .env up -d db redis
+docker compose -f compose.yml --env-file .env up -d db
 
 # run backend
 cd backend
@@ -56,7 +55,6 @@ A starter file exists at `backend/.env.example`.
   - Default: `postgresql+psycopg://postgres:postgres@localhost:5432/openclaw_agency`
   - Recommended local/dev default (matches `backend/.env.example`):
     `postgresql+psycopg://postgres:postgres@localhost:5432/mission_control`
-- `REDIS_URL` (default: `redis://localhost:6379/0`)
 - `CORS_ORIGINS` (comma-separated)
   - Example: `http://localhost:3000`
 - `BASE_URL` (optional)
@@ -152,16 +150,6 @@ uv run python scripts/export_openapi.py
   ```
 
 - If backend runs **locally** (not in compose), `DATABASE_URL` should usually point at `localhost`.
-
-### Backend can’t connect to Redis
-
-- Ensure the Redis container is up:
-
-  ```bash
-  docker compose -f compose.yml --env-file .env logs -f --tail=200 redis
-  ```
-
-- Confirm `REDIS_URL=redis://localhost:6379/0` when running backend locally.
 
 ### CORS issues from the frontend
 

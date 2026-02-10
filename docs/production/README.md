@@ -2,11 +2,11 @@
 
 This document describes **production-ish** deployment patterns for **OpenClaw Mission Control**.
 
-Mission Control is a web app (frontend) + API (backend) + Postgres + Redis. The simplest reliable
+Mission Control is a web app (frontend) + API (backend) + Postgres. The simplest reliable
 baseline is Docker Compose plus a reverse proxy with TLS.
 
 > This repo currently ships a developer-friendly `compose.yml`. For real production, you should:
-> - put Postgres/Redis on managed services or dedicated hosts when possible
+> - put Postgres on a managed service or dedicated host when possible
 > - terminate TLS at a reverse proxy
 > - set up backups + upgrades
 > - restrict network exposure (firewall)
@@ -33,7 +33,6 @@ On one VM:
   - frontend container (internal port 3000)
   - backend container (internal port 8000)
 - Postgres container (internal 5432)
-- Redis container (internal 6379)
 
 ### Ports / firewall
 
@@ -44,7 +43,6 @@ Expose to the internet:
 Do **not** expose:
 
 - Postgres 5432
-- Redis 6379
 - backend 8000
 - frontend 3000
 
@@ -160,13 +158,13 @@ The main reason to split is reliability and blast-radius reduction.
 ### Option A: 2 hosts
 
 - Host 1: reverse proxy + frontend + backend
-- Host 2: Postgres + Redis (or managed)
+- Host 2: Postgres (or managed)
 
 ### Option B: 3 hosts
 
 - Host 1: reverse proxy + frontend
 - Host 2: backend
-- Host 3: Postgres + Redis (or managed)
+- Host 3: Postgres (or managed)
 
 ### Networking / security groups
 
@@ -175,14 +173,12 @@ Minimum rules:
 - Public internet → reverse proxy host: `80/443`
 - Reverse proxy host → backend host: `8000` (or whatever you publish internally)
 - Backend host → DB host: `5432`
-- Backend host → Redis host: `6379`
 
 Everything else: deny.
 
 ### Configuration considerations
 
 - `DATABASE_URL` must point to the DB host (not `localhost`).
-- `REDIS_URL` must point to the Redis host.
 - `CORS_ORIGINS` must include the public frontend URL.
 - `NEXT_PUBLIC_API_URL` should be the public API base URL.
 
@@ -197,7 +193,7 @@ The backend currently runs Alembic migrations on startup (see logs). In multi-ho
 
 - [ ] TLS is enabled, HTTP redirects to HTTPS
 - [ ] Only 80/443 exposed publicly
-- [ ] Postgres/Redis not publicly accessible
+- [ ] Postgres not publicly accessible
 - [ ] Backups tested (restore drill)
 - [ ] Log retention/rotation configured
 - [ ] Regular upgrade process (pull latest, rebuild, restart)
@@ -209,4 +205,3 @@ The backend currently runs Alembic migrations on startup (see logs). In multi-ho
   - `NEXT_PUBLIC_API_URL`
   - backend CORS settings (`CORS_ORIGINS`)
   - firewall rules between proxy ↔ backend
-

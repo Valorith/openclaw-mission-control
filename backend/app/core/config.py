@@ -25,7 +25,6 @@ class Settings(BaseSettings):
 
     environment: str = "dev"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/openclaw_agency"
-    redis_url: str = "redis://localhost:6379/0"
 
     # Clerk auth (auth only; roles stored in DB)
     clerk_secret_key: str = Field(min_length=1)
