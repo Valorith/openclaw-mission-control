@@ -32,8 +32,8 @@ from app.schemas.board_onboarding import (
     BoardOnboardingUserProfile,
 )
 from app.schemas.boards import BoardRead
-from app.services.openclaw.gateway_resolver import get_gateway_for_board
 from app.services.openclaw.gateway_dispatch import GatewayDispatchService
+from app.services.openclaw.gateway_resolver import get_gateway_for_board
 from app.services.openclaw.onboarding_service import BoardOnboardingMessagingService
 from app.services.openclaw.policies import OpenClawAuthorizationPolicy
 from app.services.openclaw.provisioning_db import (

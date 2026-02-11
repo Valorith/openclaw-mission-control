@@ -12,8 +12,8 @@ from app.models.boards import Board
 from app.models.gateways import Gateway
 from app.services.openclaw.db_service import OpenClawDBService
 from app.services.openclaw.gateway_resolver import (
-    get_gateway_for_board,
     gateway_client_config,
+    get_gateway_for_board,
     optional_gateway_client_config,
     require_gateway_for_board,
 )

@@ -109,4 +109,3 @@ async def delete_board(session: AsyncSession, *, board: Board) -> OkResponse:
     await session.delete(board)
     await session.commit()
     return OkResponse()
-

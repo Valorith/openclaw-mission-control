@@ -20,19 +20,9 @@ from app.core.time import utcnow
 from app.db import crud
 from app.db.pagination import paginate
 from app.db.session import get_session
-from app.models.activity_events import ActivityEvent
-from app.models.agents import Agent
-from app.models.approvals import Approval
 from app.models.board_groups import BoardGroup
-from app.models.board_memory import BoardMemory
-from app.models.board_onboarding import BoardOnboardingSession
 from app.models.boards import Board
 from app.models.gateways import Gateway
-from app.models.organization_board_access import OrganizationBoardAccess
-from app.models.organization_invite_board_access import OrganizationInviteBoardAccess
-from app.models.task_dependencies import TaskDependency
-from app.models.task_fingerprints import TaskFingerprint
-from app.models.tasks import Task
 from app.schemas.boards import BoardCreate, BoardRead, BoardUpdate
 from app.schemas.common import OkResponse
 from app.schemas.pagination import DefaultLimitOffsetPage
