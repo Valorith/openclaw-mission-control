@@ -1,4 +1,17 @@
-"""Agent authentication helpers for token-backed API access."""
+"""Agent authentication helpers for token-backed API access.
+
+This module is used for *agent-originated* API calls (as opposed to human users).
+
+Key ideas:
+- Agents authenticate with an opaque token presented as `X-Agent-Token: <token>`.
+- For convenience, some deployments may also allow `Authorization: Bearer <token>`
+  for agents (controlled by caller/dependency).
+- To reduce write-amplification, we only touch `Agent.last_seen_at` at a fixed
+  interval and we avoid touching it for safe/read-only HTTP methods.
+
+This is intentionally separate from user authentication (Clerk/local bearer token)
+so we can evolve agent policy independently.
+"""
 
 from __future__ import annotations
 

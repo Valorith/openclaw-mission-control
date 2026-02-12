@@ -1,4 +1,23 @@
-"""Global exception handlers and request-id middleware for FastAPI."""
+"""Global exception handlers and request-id middleware for FastAPI.
+
+This module standardizes two operational behaviors:
+
+1) **Request IDs**
+   - Every response includes an `X-Request-Id` header.
+   - Clients may supply their own request id; otherwise we generate one.
+   - The request id is propagated into logs via context vars.
+
+2) **Error responses**
+   - Errors are returned as JSON with a stable top-level shape:
+     `{ "detail": ..., "request_id": ... }`
+   - Validation errors (`422`) return structured field errors.
+   - Unhandled errors are logged at ERROR and return a generic 500.
+
+Design notes:
+- The request-id middleware is installed *outermost* so it runs even when other
+  middleware returns early.
+- Health endpoints are excluded from request logs by default to reduce noise.
+"""
 
 from __future__ import annotations
 

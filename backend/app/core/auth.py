@@ -1,4 +1,19 @@
-"""User authentication helpers for Clerk and local-token auth modes."""
+"""User authentication helpers for Clerk and local-token auth modes.
+
+This module resolves an authenticated *user* from inbound HTTP requests.
+
+Auth modes:
+- `local`: a single shared bearer token (`LOCAL_AUTH_TOKEN`) for self-hosted
+  deployments.
+- `clerk`: Clerk JWT authentication for multi-user deployments.
+
+The public surface area is the `get_auth_context*` dependencies, which return an
+`AuthContext` used across API routers.
+
+Notes:
+- This file documents *why* some choices exist (e.g. claim extraction fallbacks)
+  so maintainers can safely modify auth behavior later.
+"""
 
 from __future__ import annotations
 

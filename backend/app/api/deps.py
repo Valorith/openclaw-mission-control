@@ -1,4 +1,20 @@
-"""Reusable FastAPI dependencies for auth and board/task access."""
+"""Reusable FastAPI dependencies for auth and board/task access.
+
+These dependencies are the main "policy wiring" layer for the API.
+
+They:
+- resolve the authenticated actor (admin user vs agent)
+- enforce organization/board access rules
+- provide common "load or 404" helpers (board/task)
+
+Why this exists:
+- Keeping authorization logic centralized makes it easier to reason about (and
+  audit) permissions as the API surface grows.
+- Some routes allow either admin users or agents; others require user auth.
+
+If you're adding a new endpoint, prefer composing from these dependencies instead
+of re-implementing permission checks in the router.
+"""
 
 from __future__ import annotations
 
