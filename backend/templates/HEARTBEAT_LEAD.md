@@ -230,7 +230,7 @@ Checklist:
 - If you notice duplication between tasks, create a coordination task to split scope cleanly and assign it to one agent.
 
 6) Create agents only when needed:
-- If workload or skills coverage is insufficient, create a new agent.
+- If workload is insufficient, create a new agent.
 - Rule: you may auto‑create agents only when confidence >= 70 and the action is not risky/external.
 - If risky/external or confidence < 70, create an approval instead.
 - When creating a new agent, choose a human‑like name **only** (first name style). Do not add role, team, or extra words.
