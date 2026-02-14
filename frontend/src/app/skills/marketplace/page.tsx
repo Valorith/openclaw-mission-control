@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/auth/clerk";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,7 +29,7 @@ import {
 import { SkillInstallDialog } from "@/components/skills/SkillInstallDialog";
 import { MarketplaceSkillsTable } from "@/components/skills/MarketplaceSkillsTable";
 import { DashboardPageLayout } from "@/components/templates/DashboardPageLayout";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useOrganizationMembership } from "@/lib/use-organization-membership";
 import { useUrlSorting } from "@/lib/use-url-sorting";
 import { Input } from "@/components/ui/input";
@@ -48,14 +48,18 @@ const MARKETPLACE_SKILLS_SORTABLE_COLUMNS = [
   "source",
   "updated_at",
 ];
+const MARKETPLACE_DEFAULT_PAGE_SIZE = 25;
+const MARKETPLACE_PAGE_SIZE_OPTIONS = [25, 50, 100, 200] as const;
 
-type MarketplaceSkillListParams =
-  listMarketplaceSkillsApiV1SkillsMarketplaceGetParams & {
-    search?: string;
-    category?: string;
-    risk?: string;
-    pack_id?: string;
-  };
+type MarketplaceSkillListParams = {
+  gateway_id: string;
+  search?: string;
+  category?: string;
+  risk?: string;
+  pack_id?: string;
+  limit?: number;
+  offset?: number;
+};
 
 const RISK_SORT_ORDER: Record<string, number> = {
   safe: 10,
@@ -118,8 +122,33 @@ function formatCategoryLabel(category: string) {
     .join(" ");
 }
 
+function parsePositiveIntParam(value: string | null, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function parsePageSizeParam(value: string | null) {
+  const parsed = parsePositiveIntParam(value, MARKETPLACE_DEFAULT_PAGE_SIZE);
+  if (
+    MARKETPLACE_PAGE_SIZE_OPTIONS.includes(
+      parsed as (typeof MARKETPLACE_PAGE_SIZE_OPTIONS)[number],
+    )
+  ) {
+    return parsed;
+  }
+  return MARKETPLACE_DEFAULT_PAGE_SIZE;
+}
+
 export default function SkillsMarketplacePage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { isSignedIn } = useAuth();
   const { isAdmin } = useOrganizationMembership(isSignedIn);
@@ -137,9 +166,20 @@ export default function SkillsMarketplacePage() {
   const [installingGatewayId, setInstallingGatewayId] = useState<string | null>(
     null,
   );
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedRisk, setSelectedRisk] = useState<string>("safe");
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialCategory = (searchParams.get("category") ?? "all")
+    .trim()
+    .toLowerCase();
+  const initialRisk = (searchParams.get("risk") ?? "safe").trim().toLowerCase();
+  const initialPage = parsePositiveIntParam(searchParams.get("page"), 1);
+  const initialPageSize = parsePageSizeParam(searchParams.get("limit"));
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [selectedCategory, setSelectedCategory] = useState<string>(
+    initialCategory || "all",
+  );
+  const [selectedRisk, setSelectedRisk] = useState<string>(initialRisk || "safe");
+  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [pageSize, setPageSize] = useState(initialPageSize);
 
   const { sorting, onSortingChange } = useUrlSorting({
     allowedColumnIds: MARKETPLACE_SKILLS_SORTABLE_COLUMNS,
@@ -180,6 +220,8 @@ export default function SkillsMarketplacePage() {
   const skillsParams = useMemo<MarketplaceSkillListParams>(() => {
     const params: MarketplaceSkillListParams = {
       gateway_id: resolvedGatewayId,
+      limit: pageSize,
+      offset: (currentPage - 1) * pageSize,
     };
     if (normalizedSearch) {
       params.search = normalizedSearch;
@@ -194,7 +236,15 @@ export default function SkillsMarketplacePage() {
       params.pack_id = selectedPackId;
     }
     return params;
-  }, [normalizedCategory, normalizedRisk, normalizedSearch, resolvedGatewayId, selectedPackId]);
+  }, [
+    currentPage,
+    pageSize,
+    normalizedCategory,
+    normalizedRisk,
+    normalizedSearch,
+    resolvedGatewayId,
+    selectedPackId,
+  ]);
   const filterOptionsParams = useMemo<MarketplaceSkillListParams>(() => {
     const params: MarketplaceSkillListParams = {
       gateway_id: resolvedGatewayId,
@@ -267,6 +317,41 @@ export default function SkillsMarketplacePage() {
   );
 
   const filteredSkills = useMemo(() => skills, [skills]);
+  const totalCountInfo = useMemo(() => {
+    if (skillsQuery.data?.status !== 200) {
+      return { hasKnownTotal: false, total: skills.length };
+    }
+    const totalCountHeader = skillsQuery.data.headers.get("x-total-count");
+    if (typeof totalCountHeader === "string" && totalCountHeader.trim() !== "") {
+      const parsed = Number(totalCountHeader);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return { hasKnownTotal: true, total: parsed };
+      }
+    }
+    return { hasKnownTotal: false, total: skills.length };
+  }, [skills, skillsQuery.data]);
+  const totalSkills = useMemo(() => {
+    if (totalCountInfo.hasKnownTotal) {
+      return totalCountInfo.total;
+    }
+    return (currentPage - 1) * pageSize + skills.length;
+  }, [currentPage, pageSize, skills.length, totalCountInfo]);
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalSkills / pageSize)),
+    [pageSize, totalSkills],
+  );
+  const hasNextPage = useMemo(() => {
+    if (totalCountInfo.hasKnownTotal) {
+      return currentPage < totalPages;
+    }
+    return skills.length === pageSize;
+  }, [currentPage, pageSize, skills.length, totalCountInfo.hasKnownTotal, totalPages]);
+  const rangeStart =
+    totalSkills === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeEnd =
+    totalSkills === 0
+      ? 0
+      : (currentPage - 1) * pageSize + skills.length;
 
   const categoryFilterOptions = useMemo(() => {
     const byValue = new Map<string, string>();
@@ -329,6 +414,74 @@ export default function SkillsMarketplacePage() {
       setSelectedRisk("safe");
     }
   }, [riskFilterOptions, selectedRisk]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    normalizedCategory,
+    normalizedRisk,
+    normalizedSearch,
+    pageSize,
+    resolvedGatewayId,
+    selectedPackId,
+  ]);
+
+  useEffect(() => {
+    if (totalCountInfo.hasKnownTotal && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalCountInfo.hasKnownTotal, totalPages]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    const normalizedSearchForUrl = searchTerm.trim();
+    if (normalizedSearchForUrl) {
+      nextParams.set("search", normalizedSearchForUrl);
+    } else {
+      nextParams.delete("search");
+    }
+
+    if (selectedCategory !== "all") {
+      nextParams.set("category", selectedCategory);
+    } else {
+      nextParams.delete("category");
+    }
+
+    if (selectedRisk !== "safe") {
+      nextParams.set("risk", selectedRisk);
+    } else {
+      nextParams.delete("risk");
+    }
+
+    if (pageSize !== MARKETPLACE_DEFAULT_PAGE_SIZE) {
+      nextParams.set("limit", String(pageSize));
+    } else {
+      nextParams.delete("limit");
+    }
+
+    if (currentPage > 1) {
+      nextParams.set("page", String(currentPage));
+    } else {
+      nextParams.delete("page");
+    }
+
+    const currentQuery = searchParams.toString();
+    const nextQuery = nextParams.toString();
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
+        scroll: false,
+      });
+    }
+  }, [
+    currentPage,
+    pathname,
+    pageSize,
+    router,
+    searchParams,
+    searchTerm,
+    selectedCategory,
+    selectedRisk,
+  ]);
 
   const loadSkillsByGateway = useCallback(async () => {
     // NOTE: This is technically N+1 (one request per gateway). We intentionally
@@ -600,11 +753,11 @@ export default function SkillsMarketplacePage() {
         title="Skills Marketplace"
         description={
           selectedPack
-            ? `${filteredSkills.length} skill${
-                filteredSkills.length === 1 ? "" : "s"
+            ? `${totalSkills} skill${
+                totalSkills === 1 ? "" : "s"
               } for ${selectedPack.name}.`
-            : `${filteredSkills.length} skill${
-                filteredSkills.length === 1 ? "" : "s"
+            : `${totalSkills} skill${
+                totalSkills === 1 ? "" : "s"
               } synced from packs.`
         }
         isAdmin={isAdmin}
@@ -719,6 +872,76 @@ export default function SkillsMarketplacePage() {
                     actionLabel: "Add your first pack",
                   }}
                 />
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <p>
+                    Showing {rangeStart}-{rangeEnd} of {totalSkills}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Rows
+                    </span>
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={(value) => {
+                        const next = Number.parseInt(value, 10);
+                        if (
+                          MARKETPLACE_PAGE_SIZE_OPTIONS.includes(
+                            next as (typeof MARKETPLACE_PAGE_SIZE_OPTIONS)[number],
+                          )
+                        ) {
+                          setPageSize(next);
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        id="marketplace-footer-limit-filter"
+                        className="h-8 w-24"
+                      >
+                        <SelectValue placeholder="25" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MARKETPLACE_PAGE_SIZE_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={String(option)}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={currentPage <= 1 || skillsQuery.isLoading}
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    {totalCountInfo.hasKnownTotal
+                      ? `Page ${currentPage} of ${totalPages}`
+                      : `Page ${currentPage}`}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!hasNextPage || skillsQuery.isLoading}
+                    onClick={() => {
+                      setCurrentPage((prev) =>
+                        totalCountInfo.hasKnownTotal
+                          ? Math.min(totalPages, prev + 1)
+                          : prev + 1,
+                      );
+                    }}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             </>
           )}

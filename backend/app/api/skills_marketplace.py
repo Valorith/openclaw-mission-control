@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Iterator, TextIO
 from urllib.parse import unquote, urlparse
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, or_
-from sqlmodel import col
+from sqlmodel import col, select
 
 from app.api.deps import require_org_admin
 from app.core.time import utcnow
@@ -940,11 +940,14 @@ def _apply_pack_candidate_updates(
 
 @router.get("/marketplace", response_model=list[MarketplaceSkillCardRead])
 async def list_marketplace_skills(
+    response: Response,
     gateway_id: UUID = GATEWAY_ID_QUERY,
     search: str | None = Query(default=None),
     category: str | None = Query(default=None),
     risk: str | None = Query(default=None),
     pack_id: UUID | None = Query(default=None, alias="pack_id"),
+    limit: int | None = Query(default=None, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = SESSION_DEP,
     ctx: OrganizationContext = ORG_ADMIN_DEP,
 ) -> list[MarketplaceSkillCardRead]:
@@ -1002,11 +1005,19 @@ async def list_marketplace_skills(
             ),
         )
 
-    skills = (
-        await skills_query
-        .order_by(col(MarketplaceSkill.created_at).desc())
-        .all(session)
-    )
+    if limit is not None:
+        count_statement = select(func.count()).select_from(
+            skills_query.statement.order_by(None).subquery()
+        )
+        total_count = int((await session.exec(count_statement)).one() or 0)
+        response.headers["X-Total-Count"] = str(total_count)
+        response.headers["X-Limit"] = str(limit)
+        response.headers["X-Offset"] = str(offset)
+
+    ordered_query = skills_query.order_by(col(MarketplaceSkill.created_at).desc())
+    if limit is not None:
+        ordered_query = ordered_query.offset(offset).limit(limit)
+    skills = await ordered_query.all(session)
     installations = await GatewayInstalledSkill.objects.filter_by(gateway_id=gateway.id).all(
         session
     )
