@@ -24,6 +24,32 @@ async def test_security_headers_middleware_passes_through_non_http_scope() -> No
     assert called is True
 
 
+@pytest.mark.asyncio
+async def test_security_headers_middleware_appends_lowercase_raw_header_names() -> None:
+    sent_messages: list[dict[str, object]] = []
+
+    async def app(scope, receive, send):  # type: ignore[no-untyped-def]
+        _ = scope
+        _ = receive
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+    async def capture(message):  # type: ignore[no-untyped-def]
+        sent_messages.append(message)
+
+    middleware = SecurityHeadersMiddleware(app, x_frame_options="SAMEORIGIN")
+    await middleware({"type": "http", "method": "GET", "path": "/", "headers": []}, lambda: None, capture)
+
+    response_start = next(
+        message for message in sent_messages if message.get("type") == "http.response.start"
+    )
+    headers = response_start.get("headers")
+    assert isinstance(headers, list)
+    header_names = {name for name, _value in headers}
+    assert b"x-frame-options" in header_names
+    assert b"X-Frame-Options" not in header_names
+
+
 def test_security_headers_middleware_injects_configured_headers() -> None:
     app = FastAPI()
     app.add_middleware(

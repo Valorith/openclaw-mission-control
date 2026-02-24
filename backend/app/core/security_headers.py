@@ -11,10 +11,10 @@ if TYPE_CHECKING:  # pragma: no cover
 class SecurityHeadersMiddleware:
     """Inject configured security headers into every HTTP response."""
 
-    _X_CONTENT_TYPE_OPTIONS = b"X-Content-Type-Options"
-    _X_FRAME_OPTIONS = b"X-Frame-Options"
-    _REFERRER_POLICY = b"Referrer-Policy"
-    _PERMISSIONS_POLICY = b"Permissions-Policy"
+    _X_CONTENT_TYPE_OPTIONS = b"x-content-type-options"
+    _X_FRAME_OPTIONS = b"x-frame-options"
+    _REFERRER_POLICY = b"referrer-policy"
+    _PERMISSIONS_POLICY = b"permissions-policy"
 
     def __init__(
         self,
