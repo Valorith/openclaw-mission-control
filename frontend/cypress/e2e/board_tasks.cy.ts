@@ -24,6 +24,14 @@ describe("/boards/:id task board", () => {
     });
   }
 
+  function openEditTaskDialog() {
+    cy.get('button[title="Edit task"]', { timeout: 20_000 })
+      .should("be.visible")
+      .and("not.be.disabled")
+      .click({ force: true });
+    cy.get('[aria-label="Edit task"]', { timeout: 20_000 }).should("be.visible");
+  }
+
   it("auth negative: signed-out user is redirected to sign-in", () => {
     cy.visit("/boards/b1");
     cy.location("pathname", { timeout: 30_000 }).should("match", /\/sign-in/);
@@ -31,6 +39,51 @@ describe("/boards/:id task board", () => {
 
   it("happy path: renders tasks from snapshot and supports create + status update + delete (stubbed)", () => {
     stubEmptySse();
+
+    cy.intercept("GET", `${apiBase}/organizations/me/member*`, {
+      statusCode: 200,
+      body: {
+        id: "m1",
+        organization_id: "o1",
+        user_id: "u1",
+        role: "owner",
+        all_boards_read: true,
+        all_boards_write: true,
+        created_at: "2026-02-11T00:00:00Z",
+        updated_at: "2026-02-11T00:00:00Z",
+        board_access: [{ board_id: "b1", can_read: true, can_write: true }],
+      },
+    }).as("membership");
+
+    cy.intercept("GET", `${apiBase}/users/me*`, {
+      statusCode: 200,
+      body: {
+        id: "u1",
+        clerk_user_id: "clerk_u1",
+        email,
+        name: "Jane Test",
+        preferred_name: "Jane",
+        timezone: "America/New_York",
+        is_super_admin: false,
+      },
+    }).as("me");
+
+    cy.intercept("GET", `${apiBase}/organizations/me/list*`, {
+      statusCode: 200,
+      body: [
+        { id: "o1", name: "Personal", role: "owner", is_active: true },
+      ],
+    }).as("organizations");
+
+    cy.intercept("GET", `${apiBase}/tags*`, {
+      statusCode: 200,
+      body: { items: [], total: 0, limit: 200, offset: 0 },
+    }).as("tags");
+
+    cy.intercept("GET", `${apiBase}/organizations/me/custom-fields*`, {
+      statusCode: 200,
+      body: [],
+    }).as("customFields");
 
     cy.intercept("GET", `${apiBase}/boards/b1/snapshot*`, {
       statusCode: 200,
@@ -146,6 +199,11 @@ describe("/boards/:id task board", () => {
       body: { ok: true },
     }).as("deleteTask");
 
+    cy.intercept("GET", `${apiBase}/boards/b1/tasks/t1/comments*`, {
+      statusCode: 200,
+      body: { items: [], total: 0, limit: 200, offset: 0 },
+    }).as("taskComments");
+
     cy.visit("/sign-in");
     cy.clerkLoaded();
     cy.clerkSignIn({ strategy: "email_code", identifier: email });
@@ -153,7 +211,14 @@ describe("/boards/:id task board", () => {
     cy.visit("/boards/b1");
     cy.waitForAppLoaded();
 
-    cy.wait(["@snapshot"]);
+    cy.wait([
+      "@snapshot",
+      "@membership",
+      "@me",
+      "@organizations",
+      "@tags",
+      "@customFields",
+    ]);
 
     // Existing task visible.
     cy.contains("Inbox task").should("be.visible");
@@ -162,36 +227,45 @@ describe("/boards/:id task board", () => {
     // Board page uses an icon-only button with aria-label="New task".
     cy.get('button[aria-label="New task"]').click({ force: true });
 
-    cy.get("input")
-      .filter(
-        '[placeholder*="Title"], [name*="title"], [id*="title"], input[type="text"]',
-      )
-      .first()
-      .type("New task");
-
-    cy.contains("button", /create|save|add/i).click({ force: true });
+    cy.contains('[role="dialog"]', "New task")
+      .should("be.visible")
+      .within(() => {
+        cy.contains("label", "Title").parent().find("input").type("New task");
+        cy.contains("button", /^Create task$/).click({ force: true });
+      });
     cy.wait(["@createTask"]);
 
     cy.contains("New task").should("be.visible");
 
     // Open edit task dialog.
     cy.contains("Inbox task").click({ force: true });
-    cy.contains("Edit task").should("be.visible");
+    cy.wait(["@taskComments"]);
+    cy.contains(/task detail/i).should("be.visible");
+    openEditTaskDialog();
 
     // Change status via Status select.
-    cy.contains("label", "Status")
-      .parent()
-      .within(() => {
-        cy.get("button").first().click({ force: true });
-      });
+    cy.get('[aria-label="Edit task"]').within(() => {
+      cy.contains("label", "Status")
+        .parent()
+        .within(() => {
+          cy.get('[role="combobox"]').first().click({ force: true });
+        });
+    });
 
     cy.contains("In progress").click({ force: true });
 
     cy.contains("button", /save changes/i).click({ force: true });
     cy.wait(["@updateTask"]);
+    cy.get('[aria-label="Edit task"]').should("not.exist");
+
+    // Save closes the edit dialog; reopen it from task detail.
+    cy.contains(/task detail/i).should("be.visible");
+    openEditTaskDialog();
 
     // Delete task via delete dialog.
-    cy.contains("button", /^Delete task$/).click({ force: true });
+    cy.get('[aria-label="Edit task"]').within(() => {
+      cy.contains("button", /^Delete task$/).click({ force: true });
+    });
     cy.get('[aria-label="Delete task"]').should("be.visible");
     cy.get('[aria-label="Delete task"]').within(() => {
       cy.contains("button", /^Delete task$/).click({ force: true });
