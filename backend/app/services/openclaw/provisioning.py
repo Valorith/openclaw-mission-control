@@ -113,13 +113,8 @@ def _channel_heartbeat_visibility_patch(config_data: dict[str, Any]) -> dict[str
     """Build a minimal patch ensuring channel default heartbeat visibility is configured.
 
     Gateways may have existing channel config; we only want to fill missing keys rather than
-    overwrite operator intent.
-
-    Returns:
-    - `None` if no change is needed
-    - a shallow patch dict suitable for a config merge otherwise
-    """
-
+    overwrite operator intent. Returns `None` if no change is needed, otherwise returns a shallow
+    patch dict suitable for a config merge."""
     channels = config_data.get("channels")
     if not isinstance(channels, dict):
         return {"defaults": {"heartbeat": DEFAULT_CHANNEL_HEARTBEAT_VISIBILITY.copy()}}
